@@ -1,0 +1,33 @@
+# Weekly off-platform copy of the database, kept as a private workflow artifact for 90 days.
+# Repo secret needed: DATABASE_URL (use Neon's DIRECT connection string, not the pooled one).
+# Until it is set, the job does nothing.
+name: Weekly DB backup
+
+on:
+  schedule:
+    - cron: "30 20 * * 6" # Sunday 02:00 IST
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+    steps:
+      - name: Install pg_dump 17
+        if: env.DATABASE_URL != ''
+        run: |
+          sudo apt-get install -y postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-client-17
+      - name: Dump
+        if: env.DATABASE_URL != ''
+        run: /usr/lib/postgresql/17/bin/pg_dump "$DATABASE_URL" --format=custom --no-owner --file="job-challan-$(date +%F).dump"
+      - uses: actions/upload-artifact@v4
+        if: env.DATABASE_URL != ''
+        with:
+          name: db-backup-${{ github.run_id }}
+          path: "*.dump"
+          retention-days: 90
+
+# Restore: pg_restore --no-owner --clean --dbname "$DATABASE_URL" job-challan-YYYY-MM-DD.dump

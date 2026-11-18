@@ -1,0 +1,19 @@
+# Sends due task reminders as push notifications. GitHub may delay scheduled runs by a few minutes.
+# Repo secrets needed: APP_URL (e.g. https://job-challan.example.com) and CRON_SECRET (same as the app's .env).
+# Until both are set, the job does nothing.
+name: Task reminders
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    env:
+      APP_URL: ${{ secrets.APP_URL }}
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+    steps:
+      - if: env.APP_URL != '' && env.CRON_SECRET != ''
+        run: curl -fsS -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron/reminders"

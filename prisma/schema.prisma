@@ -1,0 +1,233 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  ADMIN
+  STAFF
+  JOBBER
+}
+
+enum CatalogType {
+  SINGLE
+  TWO_PC
+  THREE_PC
+}
+
+enum Size {
+  S
+  M
+  L
+  XL
+  XXL
+  XXXL
+  XXXXL
+  XXXXXL
+}
+
+enum PartType {
+  TOP
+  PANT
+  DUPATTA
+}
+
+enum ChallanStatus {
+  OPEN
+  TRANSFERRED
+  CLOSED
+}
+
+enum TransferType {
+  FULL
+  PARTIAL
+}
+
+enum TaskStatus {
+  OPEN
+  DONE
+}
+
+model User {
+  id           String    @id @default(cuid())
+  username     String    @unique
+  passwordHash String
+  name         String
+  role         Role
+  jobberId     String?
+  jobber       Jobber?   @relation(fields: [jobberId], references: [id])
+  isActive     Boolean   @default(true)
+  failedLogins Int       @default(0)
+  lockedUntil  DateTime?
+  createdAt    DateTime  @default(now())
+
+  challansCreated  Challan[]          @relation("ChallanCreatedBy")
+  transfersCreated Transfer[]
+  tasksAssigned    Task[]             @relation("TaskAssignee")
+  tasksCreated     Task[]             @relation("TaskCreator")
+  pushSubs         PushSubscription[]
+}
+
+model Jobber {
+  id        String    @id @default(cuid())
+  name      String
+  gstNo     String?
+  ownerName String?
+  mobile1   String
+  mobile2   String?
+  address   String?
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  users         User[]
+  challans      Challan[]
+  transfersFrom Transfer[] @relation("TransferFrom")
+  transfersTo   Transfer[] @relation("TransferTo")
+
+  @@index([name])
+}
+
+model Catalog {
+  id              String      @id @default(cuid())
+  name            String
+  volume          String?
+  code            String?
+  fabric          String?
+  type            CatalogType
+  designCount     Int
+  piecesPerDesign Int
+  totalPieces     Int
+  photoUrl        String?
+  photoPublicId   String?
+  deletedAt       DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  sizes    CatalogSize[]
+  designs  Design[]
+  challans Challan[]
+
+  @@index([updatedAt])
+}
+
+model CatalogSize {
+  id        String  @id @default(cuid())
+  catalogId String
+  catalog   Catalog @relation(fields: [catalogId], references: [id], onDelete: Cascade)
+  size      Size
+  qty       Int
+
+  @@unique([catalogId, size])
+}
+
+model Design {
+  id         String  @id @default(cuid())
+  catalogId  String
+  catalog    Catalog @relation(fields: [catalogId], references: [id], onDelete: Cascade)
+  colourName String
+
+  lines ChallanLine[]
+}
+
+model Challan {
+  // DB sequence: concurrent entries never collide. Displayed as CH-0001.
+  no              Int           @unique @default(autoincrement())
+  id              String        @id @default(cuid())
+  date            DateTime      @db.Date
+  createdById     String
+  createdBy       User          @relation("ChallanCreatedBy", fields: [createdById], references: [id])
+  jobberId        String
+  jobber          Jobber        @relation(fields: [jobberId], references: [id])
+  catalogId       String
+  catalog         Catalog       @relation(fields: [catalogId], references: [id])
+  fabricDetail    String?
+  remarks         String?
+  designPhotoUrl  String?
+  designPhotoId   String?
+  status          ChallanStatus @default(OPEN)
+  parentChallanId String?
+  parent          Challan?      @relation("ChallanSplit", fields: [parentChallanId], references: [id])
+  children        Challan[]     @relation("ChallanSplit")
+  deletedAt       DateTime?
+  createdAt       DateTime      @default(now())
+
+  lines     ChallanLine[]
+  transfers Transfer[]
+  tasks     Task[]
+
+  @@index([jobberId])
+  @@index([catalogId])
+}
+
+model ChallanLine {
+  id        String   @id @default(cuid())
+  challanId String
+  challan   Challan  @relation(fields: [challanId], references: [id], onDelete: Cascade)
+  designId  String
+  design    Design   @relation(fields: [designId], references: [id])
+  partType  PartType
+
+  lumps Lump[]
+}
+
+model Lump {
+  id     String      @id @default(cuid())
+  lineId String
+  line   ChallanLine @relation(fields: [lineId], references: [id], onDelete: Cascade)
+  seq    Int
+  meters Decimal     @db.Decimal(10, 2)
+}
+
+model Transfer {
+  id           String       @id @default(cuid())
+  challanId    String
+  challan      Challan      @relation(fields: [challanId], references: [id])
+  fromJobberId String
+  fromJobber   Jobber       @relation("TransferFrom", fields: [fromJobberId], references: [id])
+  toJobberId   String
+  toJobber     Jobber       @relation("TransferTo", fields: [toJobberId], references: [id])
+  type         TransferType
+  createdById  String
+  createdBy    User         @relation(fields: [createdById], references: [id])
+  createdAt    DateTime     @default(now())
+  note         String?
+
+  @@index([challanId])
+}
+
+model Task {
+  id               String     @id @default(cuid())
+  title            String
+  description      String?
+  assignedToUserId String
+  assignedTo       User       @relation("TaskAssignee", fields: [assignedToUserId], references: [id])
+  createdById      String
+  createdBy        User       @relation("TaskCreator", fields: [createdById], references: [id])
+  challanId        String?
+  challan          Challan?   @relation(fields: [challanId], references: [id])
+  dueAt            DateTime?
+  remindAt         DateTime?
+  status           TaskStatus @default(OPEN)
+  completedAt      DateTime?
+  remindedAt       DateTime? // push sent; null = still due
+  createdAt        DateTime   @default(now())
+
+  @@index([assignedToUserId, status])
+  @@index([status, remindAt])
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+}
