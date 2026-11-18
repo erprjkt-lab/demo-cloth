@@ -18,6 +18,27 @@ Next.js 15 · Prisma · PostgreSQL · iron-session · Cloudinary · Web Push.
 
 Photos need the three `CLOUDINARY_*` variables; without them everything else works and photo upload says it is not set up.
 
+## Run with Docker
+
+Needs Docker Desktop (or Docker Engine + Compose v2). Starts Postgres, applies the schema, seeds the admin, runs the app and a 15-minute reminders cron.
+
+1. Copy `.env.example` to `.env` and fill in at least `SESSION_SECRET` and `SEED_ADMIN_PASSWORD` (plus `CRON_SECRET`, Cloudinary and VAPID keys if you use them). `DATABASE_URL` / `DIRECT_URL` are ignored; the containers use the bundled database.
+2. Start:
+   ```
+   docker compose up -d --build
+   ```
+3. Open http://localhost:3000.
+
+| Command | What it does |
+| --- | --- |
+| `docker compose logs -f app` | Follow app logs |
+| `docker compose up -d --build` | Rebuild after code changes (schema changes are applied on start) |
+| `docker compose down` | Stop everything (data is kept) |
+| `docker compose down -v` | Stop and **delete** the database |
+| `docker compose exec db psql -U postgres job_challan` | Open a SQL shell |
+
+Optional `.env` overrides: `APP_PORT` (default 3000), `DB_PORT` (5432), `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB`, `POSTGRES_HOST` (default `db`, the bundled container; set to e.g. `db.some.co` for an external server) / `POSTGRES_PORT` (5432) / `POSTGRES_SSLMODE` (`disable`; use `require` for hosted Postgres), and `COOKIE_SECURE=true` once the app is served over HTTPS. `NEXT_PUBLIC_VAPID_PUBLIC_KEY` is baked in at build time, so rebuild after changing it.
+
 ## Features
 
 - **Challans** with lines (colour × Top/Pant/Dupatta) and lumps; totals are always summed from lumps.

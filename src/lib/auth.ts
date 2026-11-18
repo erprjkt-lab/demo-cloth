@@ -13,7 +13,11 @@ export async function getSession() {
     password: process.env.SESSION_SECRET!,
     cookieName: SESSION_COOKIE,
     ttl: 60 * 60 * 24 * 30,
-    cookieOptions: { secure: process.env.NODE_ENV === "production", sameSite: "lax" },
+    // COOKIE_SECURE=false lets a production build work over plain http (e.g. Docker on a LAN IP).
+    cookieOptions: {
+      secure: process.env.COOKIE_SECURE ? process.env.COOKIE_SECURE === "true" : process.env.NODE_ENV === "production",
+      sameSite: "lax",
+    },
   });
 }
 
