@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { db } from "@/lib/db";
 import { requirePerm } from "@/lib/auth";
 import { challanNo } from "@/lib/format";
@@ -63,8 +64,10 @@ export async function transferJob(input: unknown): Promise<{ error?: string }> {
 
   if (newStatus !== "DRAFT") {
     const fabric = challans.length ? ` with ${challans.map((c) => challanNo(c.no)).join(", ")}` : "";
-    await pushToJobber(toJobberId, { title: `New job ${jobNo(job.no)}`, body: `${job.title}${fabric}`, url: "/jobs" });
-    await pushToJobber(from, { title: `${jobNo(job.no)} moved`, body: `${job.title} now goes to another jobber`, url: "/jobs" });
+    after(() => Promise.all([
+      pushToJobber(toJobberId, { title: `New job ${jobNo(job.no)}`, body: `${job.title}${fabric}`, url: "/jobs" }),
+      pushToJobber(from, { title: `${jobNo(job.no)} moved`, body: `${job.title} now goes to another jobber`, url: "/jobs" }),
+    ]));
   }
   revalidatePath("/transfers");
   revalidatePath("/jobs");

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { db } from "@/lib/db";
 import { jobScope, requirePerm } from "@/lib/auth";
 import { challanNo } from "@/lib/format";
@@ -67,7 +68,7 @@ export async function approveJob(id: string, note?: string): Promise<Result> {
   });
   if (!updated) return { error: "Only draft jobs can be approved" };
 
-  await pushToJobber(job.jobberId, { title: `New job ${jobNo(job.no)}`, body: job.title, url: "/jobs" });
+  after(() => pushToJobber(job.jobberId, { title: `New job ${jobNo(job.no)}`, body: job.title, url: "/jobs" }));
   revalidatePath("/jobs");
   return {};
 }
@@ -91,8 +92,8 @@ export async function setJobStatus(id: string, to: JobStatus, note?: string): Pr
   }
 
   const msg = { title: `${jobNo(job.no)}: ${JOB_STATUS[to].label}`, body: `${job.title} (by ${me.name})`, url: "/jobs" };
-  if (me.role === "JOBBER") await pushToUser(job.createdById, msg);
-  else await pushToJobber(job.jobberId, msg);
+  // Push after the response so the user is not kept waiting on push services.
+  after(() => (me.role === "JOBBER" ? pushToUser(job.createdById, msg) : pushToJobber(job.jobberId, msg)));
   revalidatePath("/jobs");
   return {};
 }
@@ -224,11 +225,11 @@ export async function confirmReceipt(id: string, input: unknown): Promise<Result
     return { error: "This job was just updated by someone else. Refresh and try again." };
   }
 
-  await pushToJobber(job.jobberId, {
+  after(() => pushToJobber(job.jobberId, {
     title: result === "REWORK" ? `${jobNo(job.no)} needs rework` : `${jobNo(job.no)} received`,
     body: result === "REWORK" ? issueText : QC_RESULT[result].label,
     url: "/jobs",
-  });
+  }));
   revalidatePath("/jobs");
   return {};
 }

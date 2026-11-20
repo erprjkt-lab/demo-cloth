@@ -1,5 +1,7 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  // One SQL query per findMany/findFirst (JOIN/LATERAL) instead of one round trip per included relation.
+  previewFeatures = ["relationJoins"]
 }
 
 datasource db {

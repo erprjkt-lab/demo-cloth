@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { db } from "@/lib/db";
 import { requirePerm, requireUser } from "@/lib/auth";
 import { pushToUser } from "@/lib/push";
@@ -23,7 +24,7 @@ export async function createTask(input: unknown): Promise<Result> {
   }
 
   await db.task.create({ data: { ...t, createdById: me.id } });
-  if (assignee.id !== me.id) await pushToUser(assignee.id, { title: `New task from ${me.name}`, body: t.title, url: "/tasks" });
+  if (assignee.id !== me.id) after(() => pushToUser(assignee.id, { title: `New task from ${me.name}`, body: t.title, url: "/tasks" }));
   revalidatePath("/tasks");
   return {};
 }
