@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { BellOutlined } from "@ant-design/icons";
+import { Alert, Button } from "antd";
 import { savePushSubscription } from "./actions";
 
 const KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? "";
@@ -30,17 +32,27 @@ export function PushToggle() {
   }
 
   if (state === "loading" || state === "on") return null;
+  const text = {
+    off: "Get a phone notification for new jobs, tasks and reminders.",
+    unsupported: "For notifications on iPhone, first use Share → Add to Home Screen, then open the app from there.",
+    denied: "Notifications are blocked. Allow them for this site in the browser settings.",
+    error: "Could not turn on notifications. Try again later.",
+  }[state];
   return (
-    <div className="card mb-3 text-sm">
-      {state === "off" && (
-        <button className="btn-light w-full" onClick={enable}>
-          🔔 Turn on reminder notifications
-        </button>
-      )}
-      {state === "unsupported" && <p>For notifications on iPhone, first use Share → Add to Home Screen, then open the app from there.</p>}
-      {state === "denied" && <p>Notifications are blocked. Allow them for this site in the browser settings.</p>}
-      {state === "error" && <p className="text-red-700">Could not turn on notifications. Try again later.</p>}
-    </div>
+    <Alert
+      showIcon
+      closable
+      type={state === "error" ? "error" : "info"}
+      title={text}
+      style={{ marginBottom: 12 }}
+      action={
+        state === "off" && (
+          <Button size="small" type="primary" icon={<BellOutlined />} onClick={enable}>
+            Turn on
+          </Button>
+        )
+      }
+    />
   );
 }
 

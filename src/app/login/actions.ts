@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getSession } from "@/lib/auth";
-import type { FormState } from "@/components/ActionForm";
+type FormState = { error?: string } | undefined;
 
 const MAX_FAILS = 5;
 const LOCK_MS = 15 * 60 * 1000;

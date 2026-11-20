@@ -1,11 +1,14 @@
 import { db } from "@/lib/db";
-import { OFFICE, requireUser } from "@/lib/auth";
-import { PageHeader } from "@/components/ui";
+import { requirePerm } from "@/lib/auth";
+import { jobNo } from "@/lib/jobs";
 import { ChallanForm } from "../ChallanForm";
 
-export default async function NewChallanPage() {
-  await requireUser(...OFFICE);
-  const [jobbers, catalogs] = await Promise.all([
+export default async function NewChallanPage({ searchParams }: { searchParams: Promise<{ job?: string }> }) {
+  const me = await requirePerm("challans", "write");
+  if (me.role === "JOBBER") (await import("next/navigation")).notFound();
+  const { job } = await searchParams;
+
+  const [jobbers, catalogs, jobs] = await Promise.all([
     db.jobber.findMany({ where: { deletedAt: null }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
     db.catalog.findMany({
       where: { deletedAt: null },
@@ -18,12 +21,19 @@ export default async function NewChallanPage() {
         designs: { orderBy: { colourName: "asc" }, select: { id: true, colourName: true } },
       },
     }),
+    db.jobWork.findMany({
+      where: { deletedAt: null, status: { not: "COMPLETED" } },
+      orderBy: { no: "desc" },
+      select: { id: true, no: true, title: true, jobberId: true, catalogId: true },
+    }),
   ]);
 
   return (
-    <>
-      <PageHeader title="New challan" back="/challans" />
-      <ChallanForm jobbers={jobbers} catalogs={catalogs} />
-    </>
+    <ChallanForm
+      jobbers={jobbers}
+      catalogs={catalogs}
+      jobs={jobs.map((j) => ({ id: j.id, label: `${jobNo(j.no)} · ${j.title}`, jobberId: j.jobberId, catalogId: j.catalogId }))}
+      initialJobId={job}
+    />
   );
 }

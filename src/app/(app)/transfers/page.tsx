@@ -1,37 +1,65 @@
-import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { OFFICE, requireUser } from "@/lib/auth";
-import { Empty, PageHeader, SearchBox } from "@/components/ui";
-import { TransferRow, transferInclude } from "@/components/TransferRow";
+import { requirePerm } from "@/lib/auth";
+import { challanNo, fmtDateTime } from "@/lib/format";
+import { JOB_STATUS, jobNo, TRANSFERABLE } from "@/lib/jobs";
+import { can } from "@/lib/permissions";
+import { TransfersClient } from "./TransfersClient";
 
-export default async function TransfersPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
-  await requireUser(...OFFICE);
-  const { q } = await searchParams;
-  const num = q?.match(/^\s*(?:ch-?)?0*(\d+)\s*$/i)?.[1];
-  if (num) {
-    const c = await db.challan.findFirst({ where: { no: Number(num), deletedAt: null }, select: { id: true } });
-    if (c) redirect(`/challans/${c.id}/transfer`);
-  }
-
-  const transfers = await db.transfer.findMany({ orderBy: { createdAt: "desc" }, take: 100, include: transferInclude });
+export default async function TransfersPage({ searchParams }: { searchParams: Promise<{ job?: string }> }) {
+  const me = await requirePerm("transfers");
+  const { job } = await searchParams;
+  const canWrite = me.role !== "JOBBER" && can(me.perms, "transfers", "write");
+  const [transfers, challans, jobs, jobbers] = await Promise.all([
+    db.transfer.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 500,
+      include: {
+        challan: { select: { id: true, no: true } },
+        jobWork: { select: { id: true, no: true } },
+        fromJobber: { select: { name: true } },
+        toJobber: { select: { name: true } },
+        createdBy: { select: { name: true } },
+      },
+    }),
+    canWrite
+      ? db.challan.findMany({ where: { deletedAt: null }, orderBy: { no: "desc" }, take: 500, select: { id: true, no: true, jobber: { select: { name: true } } } })
+      : [],
+    canWrite
+      ? db.jobWork.findMany({
+          where: { deletedAt: null, status: { in: TRANSFERABLE } },
+          orderBy: { no: "desc" },
+          select: { id: true, no: true, title: true, status: true, jobberId: true, jobber: { select: { name: true } }, _count: { select: { challans: { where: { deletedAt: null } } } } },
+        })
+      : [],
+    canWrite ? db.jobber.findMany({ where: { deletedAt: null }, orderBy: { name: "asc" }, select: { id: true, name: true } }) : [],
+  ]);
 
   return (
-    <>
-      <PageHeader title="Job transfer" back="/" />
-      <p className="mb-2 text-sm text-slate-600">Enter the challan number to transfer:</p>
-      <SearchBox q={q} placeholder="e.g. CH-0012" />
-      {q && <p className="error mb-3">No challan {q}</p>}
-
-      <h2 className="mb-2 mt-4 font-semibold">History</h2>
-      {transfers.length === 0 ? (
-        <Empty>No transfers yet</Empty>
-      ) : (
-        <ul className="card divide-y divide-slate-100 p-0">
-          {transfers.map((t) => (
-            <TransferRow key={t.id} t={t} />
-          ))}
-        </ul>
-      )}
-    </>
+    <TransfersClient
+      canWrite={canWrite}
+      initialJobId={job}
+      challans={challans.map((c) => ({ value: c.id, label: `${challanNo(c.no)} · ${c.jobber.name}` }))}
+      jobs={jobs.map((j) => ({
+        value: j.id,
+        label: `${jobNo(j.no)} · ${j.title} · ${j.jobber.name} (${JOB_STATUS[j.status].label})`,
+        jobberId: j.jobberId,
+        challans: j._count.challans,
+      }))}
+      jobbers={jobbers.map((j) => ({ value: j.id, label: j.name }))}
+      rows={transfers.map((t) => ({
+        id: t.id,
+        at: fmtDateTime(t.createdAt),
+        what: t.jobWork
+          ? { kind: "job" as const, id: t.jobWork.id, no: jobNo(t.jobWork.no) }
+          : t.challan
+            ? { kind: "challan" as const, id: t.challan.id, no: challanNo(t.challan.no) }
+            : null,
+        from: t.fromJobber.name,
+        to: t.toJobber.name,
+        type: t.type,
+        note: t.note,
+        by: t.createdBy.name,
+      }))}
+    />
   );
 }

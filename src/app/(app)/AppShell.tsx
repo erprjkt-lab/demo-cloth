@@ -1,8 +1,7 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import {
   BookOutlined,
   CheckSquareOutlined,
@@ -14,184 +13,255 @@ import {
   MenuFoldOutlined,
   MenuOutlined,
   MenuUnfoldOutlined,
+  SafetyCertificateOutlined,
+  ScissorOutlined,
   SwapOutlined,
   TeamOutlined,
   UserOutlined,
   UsergroupAddOutlined,
 } from "@ant-design/icons";
-import { BrandMark, BrandName } from "@/components/Brand";
+import { Avatar, Badge, Button, Drawer, Dropdown, Grid, Layout, Menu, Typography, theme } from "antd";
+import type { MenuProps } from "antd";
+import { BrandMark } from "@/components/Brand";
+import { can, type ModuleKey, type PermMap } from "@/lib/permissions";
+import { FONT_DISPLAY, SIDEBAR_BG, SIDEBAR_BORDER } from "@/lib/theme";
 import { logout } from "../login/actions";
 
+const { Header, Sider, Content } = Layout;
+const HEADER_HEIGHT = 48; // shared by the top bar and the sidebar logo block so their borders line up
+
 type Role = "ADMIN" | "STAFF" | "JOBBER";
-type Item = { href: string; label: string; icon: React.ReactNode; badge?: number };
 
-function navItems(role: Role, taskBadge: number): Item[] {
-  const tasks = { href: "/tasks", label: role === "JOBBER" ? "My Tasks" : "Tasks", icon: <CheckSquareOutlined />, badge: taskBadge };
-  if (role === "JOBBER") return [{ href: "/challans", label: "My Challans", icon: <FileTextOutlined /> }, tasks];
-  return [
-    { href: "/", label: "Dashboard", icon: <DashboardOutlined /> },
-    { href: "/challans", label: "Challans", icon: <FileTextOutlined /> },
-    { href: "/catalogs", label: "Catalogues", icon: <BookOutlined /> },
-    { href: "/jobbers", label: "Jobbers", icon: <TeamOutlined /> },
-    { href: "/transfers", label: "Job Transfer", icon: <SwapOutlined /> },
-    tasks,
-    ...(role === "ADMIN" ? [{ href: "/admin/users", label: "Users", icon: <UsergroupAddOutlined /> }] : []),
-  ];
-}
-
-const HEADER = "h-12 shrink-0 border-b"; // 48px, shared by top bar and sidebar logo block so borders line up
+const NAV: { key: string; module: ModuleKey; label: string; jobberLabel?: string; icon: React.ReactNode }[] = [
+  { key: "/", module: "dashboard", label: "Dashboard", icon: <DashboardOutlined /> },
+  { key: "/jobs", module: "jobs", label: "Job Work", jobberLabel: "My Jobs", icon: <ScissorOutlined /> },
+  { key: "/challans", module: "challans", label: "Challans", jobberLabel: "My Challans", icon: <FileTextOutlined /> },
+  { key: "/catalogs", module: "catalogs", label: "Catalogues", icon: <BookOutlined /> },
+  { key: "/jobbers", module: "jobbers", label: "Jobbers", icon: <TeamOutlined /> },
+  { key: "/transfers", module: "transfers", label: "Job Transfer", icon: <SwapOutlined /> },
+  { key: "/tasks", module: "tasks", label: "Tasks", jobberLabel: "My Tasks", icon: <CheckSquareOutlined /> },
+  { key: "/admin/users", module: "users", label: "Users", icon: <UsergroupAddOutlined /> },
+  { key: "/admin/permissions", module: "permissions", label: "Permissions", icon: <SafetyCertificateOutlined /> },
+];
 
 export function AppShell({
   user,
-  taskBadge,
+  perms,
+  badges,
   children,
 }: {
   user: { name: string; role: Role };
-  taskBadge: number;
+  perms: PermMap;
+  badges: { jobs: number; tasks: number };
   children: React.ReactNode;
 }) {
+  const router = useRouter();
   const path = usePathname();
-  const [collapsed, setCollapsed] = useState(false);
-  const [drawer, setDrawer] = useState(false);
-  const items = navItems(user.role, taskBadge);
-  const isActive = (href: string) => (href === "/" ? path === "/" : path.startsWith(href));
+  const { token } = theme.useToken();
+  // Unknown on the server (and the first client render): assume desktop so both renders match.
+  const screens = Grid.useBreakpoint();
+  const isMobile = screens.md === false;
+  // Tablets (below 1200px) start with the 64px icon rail to leave room for tables; the toggle overrides.
+  const [userCollapsed, setUserCollapsed] = useState<boolean | null>(null);
+  const collapsed = userCollapsed ?? screens.xl === false;
+  const setCollapsed = (fn: (c: boolean) => boolean) => setUserCollapsed(fn(collapsed));
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
-  const menu = (rail: boolean) => (
-    <nav className="space-y-1 px-1 pt-2 pb-4">
-      {items.map((it) => {
-        const active = isActive(it.href);
-        return (
-          <Link
-            key={it.href}
-            href={it.href}
-            title={rail ? it.label : undefined}
-            onClick={() => setDrawer(false)}
-            className={`relative mx-1 flex h-10 items-center gap-2.5 rounded-md text-sm transition ${rail ? "justify-center" : "px-5"} ${
-              active
-                ? "nav-item-active bg-[#00a0e3]/16 text-white"
-                : "text-white/72 hover:bg-[#00a0e3]/8 hover:text-white"
-            }`}
-          >
-            <span className={`relative text-[15px] ${active ? "text-[#00a0e3]" : ""}`}>
-              {it.icon}
-              {rail && !!it.badge && <span className="absolute -top-0.5 -right-1 h-2 w-2 rounded-full bg-red-500" />}
-            </span>
-            {!rail && <span className="flex-1 truncate">{it.label}</span>}
-            {!rail && !!it.badge && (
-              <span className="min-w-5 rounded-full bg-red-500 px-1.5 text-center text-[11px] leading-5 font-semibold text-white">
-                {it.badge}
-              </span>
-            )}
-          </Link>
-        );
-      })}
-    </nav>
-  );
-
-  return (
-    <div className="flex h-dvh w-full overflow-hidden">
-      {/* Desktop sider: 220px, or a 64px icon rail when collapsed */}
-      <aside
-        className={`app-sidebar-scroll hidden shrink-0 flex-col overflow-y-auto border-r border-white/8 bg-navy transition-[width] md:flex ${
-          collapsed ? "w-16" : "w-[220px]"
-        }`}
-      >
-        <div className={`${HEADER} sticky top-0 z-[1] flex items-center gap-2.5 border-white/8 bg-navy ${collapsed ? "justify-center" : "px-5"}`}>
-          <BrandMark />
-          {!collapsed && <BrandName />}
-        </div>
-        {menu(collapsed)}
-      </aside>
-
-      {/* Mobile off-canvas drawer */}
-      {drawer && (
-        <div className="fixed inset-0 z-40 md:hidden">
-          <div className="absolute inset-0 bg-black/45" onClick={() => setDrawer(false)} />
-          <aside className="absolute inset-y-0 left-0 flex w-[82%] max-w-[280px] flex-col bg-navy shadow-xl">
-            <div className={`${HEADER} flex items-center justify-between border-white/8 px-4`}>
-              <div className="flex items-center gap-2.5">
-                <BrandMark size={30} />
-                <BrandName />
-              </div>
-              <button onClick={() => setDrawer(false)} aria-label="Close navigation" className="p-1 text-white/70">
-                <CloseOutlined />
-              </button>
-            </div>
-            <div className="app-sidebar-scroll flex-1 overflow-y-auto">{menu(false)}</div>
-          </aside>
-        </div>
-      )}
-
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <header className={`${HEADER} flex items-center justify-between border-line bg-white px-3 md:px-4`}>
-          <div className="flex items-center gap-2.5">
-            <button
-              onClick={() => setDrawer(true)}
-              aria-label="Open navigation"
-              className="rounded-md p-2 text-base text-slate-700 hover:bg-slate-100 md:hidden"
-            >
-              <MenuOutlined />
-            </button>
-            <button
-              onClick={() => setCollapsed((c) => !c)}
-              aria-label="Toggle sidebar"
-              className="hidden rounded-md p-2 text-base text-slate-700 hover:bg-slate-100 md:inline-flex"
-            >
-              {collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-            </button>
-            <div className="flex items-center gap-1.5 md:hidden">
-              <BrandMark size={22} />
-              <span className="font-display text-sm font-bold">
-                Yash <span className="text-[#00a0e3]">Enterprise</span>
-              </span>
-            </div>
-          </div>
-          <UserMenu user={user} />
-        </header>
-
-        <main className="flex-1 overflow-x-hidden overflow-y-auto bg-[#f8fafc] px-2.5 py-3 md:p-4">
-          <div className="mx-auto w-full max-w-5xl">{children}</div>
-        </main>
-      </div>
-    </div>
-  );
-}
-
-function UserMenu({ user }: { user: { name: string; role: Role } }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  // The menu navigates with router.push (no <Link>), so warm up its pages ahead of the click.
+  // Production only: in development Next.js ignores prefetch and builds each page on first visit.
+  const navKeys = NAV.filter((n) => can(perms, n.module)).map((n) => n.key).join(",");
   useEffect(() => {
-    if (!open) return;
-    const close = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
-    document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
-  }, [open]);
+    for (const key of navKeys.split(",")) router.prefetch(key);
+  }, [navKeys, router]);
 
-  return (
-    <div ref={ref} className="relative">
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className="flex h-[34px] max-w-[140px] items-center gap-1.5 rounded-md px-1 hover:bg-slate-100 md:max-w-[200px] md:px-2"
-      >
-        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand text-xs text-white">
-          <UserOutlined />
+  const badgeFor = (key: string) => (key === "/jobs" ? badges.jobs : key === "/tasks" ? badges.tasks : 0);
+  const items: MenuProps["items"] = NAV.filter((n) => can(perms, n.module)).map((n) => {
+    const label = (user.role === "JOBBER" && n.jobberLabel) || n.label;
+    const count = badgeFor(n.key);
+    return {
+      key: n.key,
+      icon: n.icon,
+      label: count ? (
+        <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          {label} <Badge count={count} size="small" />
         </span>
-        <span className="truncate text-sm font-medium">{user.name}</span>
-        <DownOutlined className="shrink-0 text-[10px] text-slate-400" />
-      </button>
-      {open && (
-        <div className="absolute top-10 right-0 z-30 w-48 rounded-lg border border-line bg-white py-1 shadow-[0_4px_16px_rgba(15,23,42,0.08)]">
-          <div className="px-3 py-2 text-xs text-slate-500">
-            Signed in as <b className="text-slate-700">{user.role.toLowerCase()}</b>
-          </div>
-          <div className="my-1 border-t border-line" />
-          <form action={logout}>
-            <button className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50">
-              <LogoutOutlined /> Logout
-            </button>
-          </form>
+      ) : (
+        label
+      ),
+    };
+  });
+  const selected = NAV.map((n) => n.key)
+    .filter((k) => (k === "/" ? path === "/" : path.startsWith(k)))
+    .sort((a, b) => b.length - a.length)[0];
+
+  const menu = (
+    <Menu
+      theme="dark"
+      mode="inline"
+      selectedKeys={selected ? [selected] : []}
+      items={items}
+      onClick={({ key }) => {
+        router.push(key);
+        setMobileNavOpen(false);
+      }}
+      className="app-sidebar-menu"
+      style={{ border: "none", paddingTop: 8, background: "transparent" }}
+    />
+  );
+
+  const brand = (compact: boolean, size: number) => (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+      <BrandMark size={size} />
+      {!compact && (
+        <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+          <Typography.Text
+            style={{ fontSize: 16, fontWeight: 700, color: "#fff", fontFamily: FONT_DISPLAY, letterSpacing: "-0.01em", lineHeight: 1.2 }}
+          >
+            Yash <span style={{ color: "#00A0E3" }}>Enterprise</span>
+          </Typography.Text>
+          <span style={{ fontSize: 9.5, fontWeight: 600, color: "rgba(255,255,255,0.45)", letterSpacing: "0.12em", textTransform: "uppercase" }}>
+            Job Challan ERP
+          </span>
         </div>
       )}
     </div>
+  );
+
+  return (
+    <Layout style={{ height: "100dvh", width: "100%", overflow: "hidden" }}>
+      {isMobile ? (
+        <Drawer
+          placement="left"
+          open={mobileNavOpen}
+          onClose={() => setMobileNavOpen(false)}
+          size="82%"
+          styles={{
+            body: { padding: 0, background: SIDEBAR_BG, display: "flex", flexDirection: "column" },
+            header: { display: "none" },
+            wrapper: { maxWidth: 280 },
+          }}
+        >
+          <div
+            style={{
+              height: HEADER_HEIGHT,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              padding: "0 16px",
+              borderBottom: `1px solid ${SIDEBAR_BORDER}`,
+              flexShrink: 0,
+            }}
+          >
+            {brand(false, 30)}
+            <Button
+              type="text"
+              aria-label="Close navigation"
+              icon={<CloseOutlined style={{ color: "rgba(255,255,255,0.7)" }} />}
+              onClick={() => setMobileNavOpen(false)}
+            />
+          </div>
+          <div className="app-sidebar-scroll" style={{ flex: 1, overflowY: "auto", paddingBottom: 16 }}>
+            {menu}
+          </div>
+        </Drawer>
+      ) : (
+        <Sider
+          collapsible
+          collapsed={collapsed}
+          trigger={null}
+          width={220}
+          collapsedWidth={64}
+          className="app-sidebar-scroll"
+          style={{ background: SIDEBAR_BG, borderRight: `1px solid ${SIDEBAR_BORDER}`, height: "100dvh", overflow: "auto" }}
+        >
+          <div
+            style={{
+              height: HEADER_HEIGHT,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: collapsed ? "center" : "flex-start",
+              padding: collapsed ? 0 : "0 20px",
+              borderBottom: `1px solid ${SIDEBAR_BORDER}`,
+              position: "sticky",
+              top: 0,
+              background: SIDEBAR_BG,
+              zIndex: 1,
+            }}
+          >
+            {brand(collapsed, 32)}
+          </div>
+          {menu}
+        </Sider>
+      )}
+
+      <Layout style={{ height: "100%", minWidth: 0, overflow: "hidden" }}>
+        <Header
+          style={{
+            background: token.colorBgContainer,
+            padding: isMobile ? "0 12px" : "0 16px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            borderBottom: `1px solid ${token.colorBorderSecondary}`,
+            height: HEADER_HEIGHT,
+            lineHeight: `${HEADER_HEIGHT}px`,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <Button
+              type="text"
+              aria-label="Toggle navigation"
+              style={{ fontSize: 16 }}
+              icon={isMobile ? <MenuOutlined /> : collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+              onClick={isMobile ? () => setMobileNavOpen(true) : () => setCollapsed((c) => !c)}
+            />
+            {isMobile && (
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <BrandMark size={22} />
+                <Typography.Text style={{ fontWeight: 700, fontSize: 14 }}>
+                  Yash <span style={{ color: "#00A0E3" }}>Enterprise</span>
+                </Typography.Text>
+              </div>
+            )}
+          </div>
+
+          <Dropdown
+            menu={{
+              items: [
+                { key: "role", label: `Signed in as ${user.role.toLowerCase()}`, disabled: true },
+                { type: "divider" },
+                { key: "logout", label: "Logout", icon: <LogoutOutlined />, danger: true },
+              ],
+              onClick: ({ key }) => key === "logout" && logout(),
+            }}
+          >
+            <Button
+              type="text"
+              style={{ height: 34, paddingInline: isMobile ? 4 : 8, display: "flex", alignItems: "center", gap: 6, maxWidth: isMobile ? 140 : 200 }}
+            >
+              <Avatar size={24} style={{ background: token.colorPrimary, flexShrink: 0 }} icon={<UserOutlined />} />
+              <Typography.Text ellipsis style={{ fontWeight: 500, maxWidth: isMobile ? 70 : 120 }}>
+                {user.name}
+              </Typography.Text>
+              <DownOutlined style={{ fontSize: 10, color: token.colorTextTertiary }} />
+            </Button>
+          </Dropdown>
+        </Header>
+
+        <Content
+          style={{
+            // Bottom padding clears the iPhone home bar.
+            padding: isMobile ? "12px 10px calc(16px + env(safe-area-inset-bottom))" : 16,
+            background: token.colorBgLayout,
+            overflowY: "auto",
+            overflowX: "hidden",
+            flex: 1,
+            minWidth: 0,
+          }}
+        >
+          <div style={{ maxWidth: 1600, margin: "0 auto", width: "100%" }}>{children}</div>
+        </Content>
+      </Layout>
+    </Layout>
   );
 }

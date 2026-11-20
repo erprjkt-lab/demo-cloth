@@ -1,130 +1,77 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { TransferRow, transferInclude } from "@/components/TransferRow";
 import { db } from "@/lib/db";
-import { challanScope, requireUser } from "@/lib/auth";
-import { challanNo, fmtDate, thumb } from "@/lib/format";
-import { PART_LABEL, PARTS } from "@/lib/validation";
-import { PageHeader } from "@/components/ui";
-import { challanTotal } from "@/components/ChallanCard";
-import { deleteChallan } from "../actions";
+import { jobberScope, requirePerm } from "@/lib/auth";
+import { challanNo, fmtDate, fmtDateTime } from "@/lib/format";
+import { jobNo } from "@/lib/jobs";
+import { can } from "@/lib/permissions";
+import { PART_LABEL, PARTS, sumMeters } from "@/lib/validation";
+import { ChallanDetail } from "./ChallanDetail";
 
 export default async function ChallanPage({ params }: { params: Promise<{ id: string }> }) {
-  const user = await requireUser();
+  const me = await requirePerm("challans");
   const { id } = await params;
   // Ownership is part of the query: another jobber's challan is simply not found.
   const c = await db.challan.findFirst({
-    where: { id, deletedAt: null, ...challanScope(user) },
+    where: { id, deletedAt: null, ...jobberScope(me) },
     include: {
       jobber: { select: { name: true } },
       catalog: { select: { name: true, volume: true } },
       createdBy: { select: { name: true } },
+      jobWork: { select: { no: true, title: true } },
       lines: { include: { design: true, lumps: { orderBy: { seq: "asc" } } } },
       parent: { select: { id: true, no: true } },
       children: { where: { deletedAt: null }, select: { id: true, no: true } },
-      transfers: { orderBy: { createdAt: "desc" }, include: transferInclude },
+      transfers: {
+        orderBy: { createdAt: "desc" },
+        include: { fromJobber: { select: { name: true } }, toJobber: { select: { name: true } }, createdBy: { select: { name: true } } },
+      },
     },
   });
   if (!c) notFound();
 
-  const lines = [...c.lines].sort(
-    (a, b) =>
-      a.design.colourName.localeCompare(b.design.colourName) || PARTS.indexOf(a.partType) - PARTS.indexOf(b.partType),
-  );
+  const lines = [...c.lines]
+    .sort((a, b) => a.design.colourName.localeCompare(b.design.colourName) || PARTS.indexOf(a.partType) - PARTS.indexOf(b.partType))
+    .map((l) => {
+      const meters = l.lumps.map((x) => x.meters.toString());
+      return {
+        id: l.id,
+        design: l.design.colourName,
+        part: PART_LABEL[l.partType],
+        lumps: l.lumps.map((x) => ({ seq: x.seq, meters: x.meters.toString() })),
+        total: sumMeters(meters),
+      };
+    });
+  const office = me.role !== "JOBBER";
 
   return (
-    <>
-      <PageHeader
-        title={challanNo(c.no)}
-        back="/challans"
-        action={
-          user.role !== "JOBBER" && (
-            <Link href={`/challans/${id}/transfer`} className="btn-light">
-              Transfer
-            </Link>
-          )
-        }
-      />
-
-      <div className="card mb-4 space-y-1 text-sm">
-        <p className="text-base font-semibold">{c.jobber.name}</p>
-        <p>
-          {c.catalog.name} {c.catalog.volume} · {fmtDate(c.date)}
-        </p>
-        {c.fabricDetail && <p><span className="text-slate-500">Fabric:</span> {c.fabricDetail}</p>}
-        {c.remarks && <p><span className="text-slate-500">Remarks:</span> {c.remarks}</p>}
-        <p className="text-slate-500">Entered by {c.createdBy.name}</p>
-        {c.parent && (
-          <p>
-            Split from{" "}
-            <Link href={`/challans/${c.parent.id}`} className="text-brand">{challanNo(c.parent.no)}</Link>
-          </p>
-        )}
-        {c.children.length > 0 && (
-          <p>
-            Lumps moved to{" "}
-            {c.children.map((ch, i) => (
-              <span key={ch.id}>
-                {i > 0 && ", "}
-                <Link href={`/challans/${ch.id}`} className="text-brand">{challanNo(ch.no)}</Link>
-              </span>
-            ))}
-          </p>
-        )}
-      </div>
-
-      {lines.map((l) => {
-        const total = challanTotal({ lines: [l] });
-        return (
-          <div key={l.id} className="card mb-3">
-            <div className="mb-2 flex items-baseline justify-between">
-              <p className="font-semibold">
-                {l.design.colourName} {PART_LABEL[l.partType]}
-              </p>
-              <p className="text-sm">
-                {l.lumps.length} lumps · <b className="tabular-nums">{total} m</b>
-              </p>
-            </div>
-            <div className="grid grid-cols-4 gap-1.5 text-sm sm:grid-cols-6">
-              {l.lumps.map((x) => (
-                <div key={x.id} className="rounded-md bg-slate-50 px-2 py-1 text-right tabular-nums">
-                  <span className="float-left text-[10px] text-slate-400">{x.seq}</span>
-                  {x.meters.toString()}
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-      })}
-
-      <div className="card mb-4 flex items-center justify-between bg-navy text-white ring-0">
-        <span>Total</span>
-        <span className="text-xl font-bold tabular-nums">{challanTotal(c)} m</span>
-      </div>
-
-      {c.designPhotoUrl && (
-        <a href={c.designPhotoUrl} target="_blank" rel="noreferrer">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={thumb(c.designPhotoUrl, 800)} alt="Design" className="mb-4 w-full rounded-xl" />
-        </a>
-      )}
-
-      {c.transfers.length > 0 && (
-        <>
-          <h2 className="mb-2 font-semibold">Transfer history</h2>
-          <ul className="card divide-y divide-slate-100 p-0">
-            {c.transfers.map((t) => (
-              <TransferRow key={t.id} t={t} />
-            ))}
-          </ul>
-        </>
-      )}
-
-      {user.role === "ADMIN" && (
-        <form action={deleteChallan.bind(null, id)} className="mt-8">
-          <button className="btn-danger w-full">Delete challan</button>
-        </form>
-      )}
-    </>
+    <ChallanDetail
+      challan={{
+        id: c.id,
+        no: challanNo(c.no),
+        date: fmtDate(c.date),
+        jobber: c.jobber.name,
+        catalog: `${c.catalog.name} ${c.catalog.volume ?? ""}`.trim(),
+        job: c.jobWork ? `${jobNo(c.jobWork.no)} · ${c.jobWork.title}` : null,
+        fabricDetail: c.fabricDetail,
+        remarks: c.remarks,
+        createdBy: c.createdBy.name,
+        photoUrl: c.designPhotoUrl,
+        parent: c.parent && { id: c.parent.id, no: challanNo(c.parent.no) },
+        children: c.children.map((ch) => ({ id: ch.id, no: challanNo(ch.no) })),
+        total: sumMeters(lines.flatMap((l) => l.lumps.map((x) => x.meters))),
+      }}
+      lines={lines}
+      transfers={c.transfers.map((t) => ({
+        id: t.id,
+        at: fmtDateTime(t.createdAt),
+        from: t.fromJobber.name,
+        to: t.toJobber.name,
+        type: t.type === "FULL" ? "Full" : "Custom",
+        note: t.note,
+        by: t.createdBy.name,
+      }))}
+      canTransfer={office && can(me.perms, "transfers", "write")}
+      canDelete={can(me.perms, "challans", "delete")}
+    />
   );
 }

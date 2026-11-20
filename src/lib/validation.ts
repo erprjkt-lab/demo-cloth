@@ -16,17 +16,20 @@ export const LUMP_MIN = 1;
 export const LUMP_MAX = 500;
 export const MAX_LUMPS_PER_LINE = 100;
 
-const req = (label: string, max = 100) => z.string().trim().min(1, `${label} is required`).max(max);
-const opt = (max = 200) => z.string().trim().max(max).transform((v) => v || null);
+// Form libraries send undefined/null for untouched fields, so optional ones accept both.
+const req = (label: string, max = 100) =>
+  z.string({ required_error: `${label} is required` }).trim().min(1, `${label} is required`).max(max);
+const opt = (max = 200) => z.string().trim().max(max).nullish().transform((v) => v || null);
 const optMatch = (re: RegExp, msg: string) =>
-  z.string().trim().refine((v) => !v || re.test(v), msg).transform((v) => v || null);
+  z.string().trim().nullish().refine((v) => !v || re.test(v), msg).transform((v) => v || null);
+const optId = z.string().nullish().transform((v) => v || null);
 const mobile = /^\d{10}$/;
 
 export const jobberSchema = z.object({
   name: req("Name"),
   gstNo: optMatch(/^[0-9]{2}[A-Z0-9]{13}$/, "GST no must be 15 characters, e.g. 24ABCDE1234F1Z5"),
   ownerName: opt(100),
-  mobile1: z.string().trim().regex(mobile, "Mobile 1 must be 10 digits"),
+  mobile1: z.string({ required_error: "Mobile 1 is required" }).trim().regex(mobile, "Mobile 1 must be 10 digits"),
   mobile2: optMatch(mobile, "Mobile 2 must be 10 digits"),
   address: opt(500),
 });
@@ -47,8 +50,8 @@ export const catalogSchema = z
       .min(1, "Add at least one design")
       .max(200),
     sizes: z.record(z.enum(SIZES), count("Size qty", 1_000_000)),
-    photoUrl: z.string().url().nullable(),
-    photoPublicId: z.string().nullable(),
+    photoUrl: z.string().url().nullish().transform((v) => v ?? null),
+    photoPublicId: optId,
   })
   .refine((c) => sizeTotal(c.sizes) === c.piecesPerDesign, {
     message: "Size ratio must add up to pieces per design",
@@ -70,10 +73,11 @@ export const challanSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date is required"),
   jobberId: z.string().min(1, "Pick a jobber"),
   catalogId: z.string().min(1, "Pick a catalogue"),
+  jobWorkId: optId,
   fabricDetail: opt(200),
   remarks: opt(500),
-  designPhotoUrl: z.string().url().nullable(),
-  designPhotoId: z.string().nullable(),
+  designPhotoUrl: z.string().url().nullish().transform((v) => v ?? null),
+  designPhotoId: optId,
   lines: z
     .array(
       z.object({
@@ -96,19 +100,71 @@ export const taskSchema = z.object({
   title: req("Title", 200),
   description: opt(1000),
   assignedToUserId: z.string().min(1, "Pick who should do it"),
-  challanNo: optMatch(/^(ch-?)?\d+$/i, "Challan no looks like CH-0012"),
-  dueAt: opt(20),
-  remindAt: opt(20),
+  challanId: optId,
+  dueAt: z.string().datetime().nullish().transform((v) => (v ? new Date(v) : null)),
+  remindAt: z.string().datetime().nullish().transform((v) => (v ? new Date(v) : null)),
 });
+
+export const jobWorkSchema = z.object({
+  title: req("Job title", 200),
+  jobberId: z.string({ required_error: "Pick a jobber" }).min(1, "Pick a jobber"),
+  catalogId: optId,
+  pieces: z.coerce
+    .number()
+    .int("Pieces must be a whole number")
+    .min(1)
+    .max(10_000_000)
+    .nullish()
+    .transform((v) => v ?? null),
+  dueDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .nullish()
+    .transform((v) => v || null),
+  notes: opt(1000),
+});
+
+/**
+ * Office QC on receipt: pieces received, how many of those are rejected, and any other issues.
+ * Not received (sent − received) is worked out on the server. No problems means it passed;
+ * otherwise the office either accepts and closes the job (problems stay open to follow up) or
+ * sends it back to the jobber for rework.
+ */
+export const qcSchema = z
+  .object({
+    receivedPieces: z.coerce.number().int().min(0).max(10_000_000).nullish().transform((v) => v ?? null),
+    rejectedPieces: z.coerce.number().int().min(0).max(10_000_000).nullish().transform((v) => v ?? 0),
+    rejectReason: opt(300),
+    issues: z
+      .array(
+        z.object({
+          type: z.enum(["MISSING", "DEFECTIVE", "NOT_DONE"], { required_error: "Pick what's wrong" }),
+          qty: z.coerce.number().int().min(1, "Quantity must be at least 1").max(10_000_000).nullish().transform((v) => v ?? null),
+          note: opt(300),
+        }),
+      )
+      .max(50)
+      .default([]),
+    outcome: z.enum(["ACCEPT", "REWORK"]),
+    notes: opt(1000),
+  })
+  .refine((q) => q.receivedPieces === null || q.rejectedPieces <= q.receivedPieces, {
+    message: "Rejected can't be more than received",
+    path: ["rejectedPieces"],
+  });
 
 export const userSchema = z
   .object({
     username: z.string().trim().toLowerCase().regex(/^[a-z0-9._-]{3,30}$/, "User ID: 3-30 letters, digits, . _ -"),
     name: req("Name"),
     role: z.enum(ROLES),
-    jobberId: z.string().transform((v) => v || null),
-    password: z.string().min(8, "Password must be at least 8 characters").max(72),
+    jobberId: optId,
+    password: z.string({ required_error: "Password is required" }).min(8, "Password must be at least 8 characters").max(72),
   })
+  .refine((u) => u.role !== "JOBBER" || u.jobberId, { message: "Pick the jobber for this login", path: ["jobberId"] });
+
+export const userUpdateSchema = z
+  .object({ name: req("Name"), role: z.enum(ROLES), jobberId: optId })
   .refine((u) => u.role !== "JOBBER" || u.jobberId, { message: "Pick the jobber for this login", path: ["jobberId"] });
 
 export const passwordSchema = z.string().min(8, "Password must be at least 8 characters").max(72);

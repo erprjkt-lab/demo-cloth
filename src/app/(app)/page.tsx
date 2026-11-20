@@ -1,62 +1,79 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { PageHeader } from "@/components/ui";
+import { challanNo } from "@/lib/format";
+import { JOB_STEPS } from "@/lib/jobs";
+import { can } from "@/lib/permissions";
+import { Dashboard } from "./Dashboard";
 
-export default async function Dashboard() {
-  const user = await requireUser();
-  if (user.role === "JOBBER") redirect("/challans");
+const RUNNING = ["ASSIGNED", "MATERIAL_RECEIVED", "IN_PROGRESS", "FINISHED", "SENT_BACK"] as const;
 
-  const [challans, jobbers, catalogs, openTasks, dueReminders] = await Promise.all([
-    db.challan.count({ where: { deletedAt: null } }),
-    db.jobber.count({ where: { deletedAt: null } }),
-    db.catalog.count({ where: { deletedAt: null } }),
-    db.task.count({ where: { status: "OPEN" } }),
-    db.task.count({ where: { status: "OPEN", remindAt: { lte: new Date() } } }),
+export default async function DashboardPage() {
+  const me = await requireUser();
+  // No dashboard access (jobbers): land on the first menu they do have.
+  if (!can(me.perms, "dashboard")) redirect(can(me.perms, "jobs") ? "/jobs" : can(me.perms, "challans") ? "/challans" : "/tasks");
+
+  const now = new Date();
+  const weekAhead = new Date(now.getTime() + 7 * 86_400_000);
+  const [byStatus, dueReminders, openIssues, running, upcoming] = await Promise.all([
+    db.jobWork.groupBy({ by: ["status"], where: { deletedAt: null }, _count: true }),
+    db.task.count({ where: { status: "OPEN", remindAt: { lte: now } } }),
+    db.qcIssue.count({ where: { resolvedAt: null, qc: { jobWork: { deletedAt: null } } } }),
+    // Jobs out with jobbers, most urgent first (no due date last).
+    db.jobWork.findMany({
+      where: { deletedAt: null, status: { in: [...RUNNING] } },
+      orderBy: [{ dueDate: { sort: "asc", nulls: "last" } }, { updatedAt: "desc" }],
+      take: 50,
+      select: {
+        id: true,
+        no: true,
+        title: true,
+        status: true,
+        pieces: true,
+        dueDate: true,
+        updatedAt: true,
+        jobber: { select: { name: true } },
+        catalog: { select: { name: true, volume: true } },
+      },
+    }),
+    // Open tasks due within a week, overdue ones included.
+    db.task.findMany({
+      where: { status: "OPEN", dueAt: { lte: weekAhead } },
+      orderBy: { dueAt: "asc" },
+      take: 15,
+      select: {
+        id: true,
+        title: true,
+        dueAt: true,
+        assignedTo: { select: { name: true } },
+        challan: { select: { id: true, no: true } },
+      },
+    }),
   ]);
 
-  const kpis = [
-    { href: "/challans", label: "Challans", value: challans },
-    { href: "/jobbers", label: "Jobbers", value: jobbers },
-    { href: "/catalogs", label: "Catalogues", value: catalogs },
-    { href: "/tasks", label: "Open tasks", value: openTasks },
-    { href: "/tasks?view=reminders", label: "Due reminders", value: dueReminders, alert: dueReminders > 0 },
-  ];
-  const actions = [
-    { href: "/catalogs/new", label: "New catalogue" },
-    { href: "/jobbers/new", label: "New jobber" },
-    { href: "/tasks/new", label: "New task" },
-    { href: "/transfers", label: "Job transfer" },
-  ];
-
   return (
-    <>
-      <PageHeader
-        title="Dashboard"
-        subtitle={`Welcome back, ${user.name}`}
-        action={<Link href="/challans/new" className="btn-primary">+ New challan</Link>}
-      />
-
-      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        {kpis.map((k) => (
-          <Link key={k.href} href={k.href} className="card transition hover:border-brand/40 hover:shadow-md">
-            <p className="text-[13px] text-slate-500">{k.label}</p>
-            <p className={`font-display text-2xl font-bold ${k.alert ? "text-red-600" : "text-slate-900"}`}>{k.value}</p>
-          </Link>
-        ))}
-      </div>
-
-      <div className="card">
-        <p className="mb-2 font-display font-semibold">Quick actions</p>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {actions.map((a) => (
-            <Link key={a.href} href={a.href} className="btn-light">
-              {a.label}
-            </Link>
-          ))}
-        </div>
-      </div>
-    </>
+    <Dashboard
+      name={me.name}
+      kpis={{ dueReminders, openIssues }}
+      jobsByStatus={JOB_STEPS.map((s) => ({ status: s, count: byStatus.find((b) => b.status === s)?._count ?? 0 }))}
+      running={running.map((j) => ({
+        id: j.id,
+        no: j.no,
+        title: j.title,
+        status: j.status,
+        pieces: j.pieces,
+        dueDate: j.dueDate,
+        updatedAt: j.updatedAt,
+        jobber: j.jobber.name,
+        catalog: j.catalog ? `${j.catalog.name} ${j.catalog.volume ?? ""}`.trim() : null,
+      }))}
+      upcoming={upcoming.map((t) => ({
+        id: t.id,
+        title: t.title,
+        dueAt: t.dueAt!,
+        assignedTo: t.assignedTo.name,
+        challan: t.challan && { id: t.challan.id, no: challanNo(t.challan.no) },
+      }))}
+    />
   );
 }

@@ -12,7 +12,7 @@ Next.js 15 · Prisma · PostgreSQL · iron-session · Cloudinary · Web Push.
    npm install
    npm run db:migrate -- --name init
    npm run db:seed
-   npm run dev -- -H 0.0.0.0
+   npm run dev
    ```
 4. Open http://localhost:3000 (or `http://<PC-IP>:3000` on a phone on the same Wi-Fi) and sign in as the seeded admin.
 
@@ -41,25 +41,28 @@ Optional `.env` overrides: `APP_PORT` (default 3000), `DB_PORT` (5432), `POSTGRE
 
 ## Features
 
-- **Challans** with lines (colour × Top/Pant/Dupatta) and lumps; totals are always summed from lumps.
+UI follows CoreFlow ERP: Ant Design 6 with CoreFlow's theme, dark sidebar, and every list as a table (cards on phones) with drawers for create/edit.
+
+- **Job Work**: office creates a job (jobber, catalogue, pieces, due date) and links challans to it. The status flow is Assigned → Material Received → In Progress → Finished → Sent Back → Completed. The jobber takes the middle four steps from their login; the office confirms Completed. Every change is logged with who and when, and the other side gets a push notification.
+- **Challans** with lines (colour × Top/Pant/Dupatta) and lumps; totals are always summed from lumps. Optionally linked to a job.
 - **History**: the jobber page shows meters and challans per catalogue; the catalogue page shows which jobber holds how many meters per design and part.
 - **Job transfer** (challan page → Transfer, or Home → Job transfer): full moves the challan; custom moves the selected lumps into a new child challan. Every transfer is logged.
 - **Tasks**: office assigns to anyone (including a jobber's login); the assignee sees it in the Tasks tab and can mark it done. Due reminders show under Tasks → Reminders.
 - **PWA + push**: installable (Add to Home Screen). Tasks tab → turn on notifications. A new task pushes immediately; reminders push when `/api/cron/reminders` runs. On iPhone, push only works from the installed app. Push needs HTTPS (or localhost).
 
-## Roles
+## Roles and permissions
 
-| Role | Can do |
+| Role | Default access |
 |------|--------|
-| ADMIN | Everything, including users and deletes (soft delete) |
-| STAFF | Jobbers, catalogues, challans, transfers, tasks: create, edit, view all |
-| JOBBER | Only their own challans (read-only) and their own tasks |
+| ADMIN | Everything, always (can't be reduced) |
+| STAFF | Job work, challans, catalogues, jobbers, transfers, tasks: read, create, edit. No deletes, users or permissions |
+| JOBBER | Only their own jobs (update status), challans (read) and tasks (mark done) |
 
-Every page and Server Action calls `requireUser()` in `src/lib/auth.ts`. Jobber ownership is enforced in the query (`challanScope`).
+Admin → **Permissions** overrides the defaults per user: Read / Write / Modify / Delete per menu, as in CoreFlow. Rules live in `src/lib/permissions.ts`; every page and Server Action calls `requirePerm()` in `src/lib/auth.ts`, and jobbers' rows are filtered in the query (`jobberScope`). Jobbers can be created and edited but not deleted.
 
 ## Checks
 
-`npm run check` runs the validation self-check (lump limits, exact meter totals, size ratio, IST times). `npm run build` typechecks and lints.
+`npm run check` runs the self-check (lump limits, exact meter totals, size ratio, job status rules, permissions). `npm run build` typechecks and lints.
 
 ## Deploy
 

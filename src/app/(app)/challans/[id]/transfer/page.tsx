@@ -1,13 +1,13 @@
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
-import { OFFICE, requireUser } from "@/lib/auth";
+import { requirePerm } from "@/lib/auth";
 import { challanNo } from "@/lib/format";
 import { PART_LABEL } from "@/lib/validation";
-import { PageHeader } from "@/components/ui";
 import { TransferForm } from "./TransferForm";
 
 export default async function TransferPage({ params }: { params: Promise<{ id: string }> }) {
-  await requireUser(...OFFICE);
+  const me = await requirePerm("transfers", "write");
+  if (me.role === "JOBBER") notFound();
   const { id } = await params;
   const c = await db.challan.findFirst({
     where: { id, deletedAt: null },
@@ -24,18 +24,14 @@ export default async function TransferPage({ params }: { params: Promise<{ id: s
   });
 
   return (
-    <>
-      <PageHeader title={`Transfer ${challanNo(c.no)}`} back={`/challans/${id}`} />
-      <p className="mb-3 text-sm text-slate-600">Now with {c.jobber.name}</p>
-      <TransferForm
-        challanId={id}
-        jobbers={jobbers}
-        lines={c.lines.map((l) => ({
-          id: l.id,
-          label: `${l.design.colourName} ${PART_LABEL[l.partType]}`,
-          lumps: l.lumps.map((x) => ({ id: x.id, seq: x.seq, meters: x.meters.toString() })),
-        }))}
-      />
-    </>
+    <TransferForm
+      challan={{ id, no: challanNo(c.no), jobber: c.jobber.name }}
+      jobbers={jobbers}
+      lines={c.lines.map((l) => ({
+        id: l.id,
+        label: `${l.design.colourName} ${PART_LABEL[l.partType]}`,
+        lumps: l.lumps.map((x) => ({ id: x.id, seq: x.seq, meters: x.meters.toString() })),
+      }))}
+    />
   );
 }

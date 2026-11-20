@@ -1,24 +1,19 @@
 "use server";
 
-import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import { OFFICE, requireUser } from "@/lib/auth";
+import { requirePerm } from "@/lib/auth";
 import { firstError, jobberSchema } from "@/lib/validation";
-import type { FormState } from "@/components/ActionForm";
 
-export async function saveJobber(id: string | null, _: FormState, fd: FormData): Promise<FormState> {
-  await requireUser(...OFFICE);
-  const parsed = jobberSchema.safeParse(Object.fromEntries(fd));
+// Jobbers can be created, edited and viewed; there is deliberately no delete.
+export async function saveJobber(id: string | null, input: unknown): Promise<{ error?: string }> {
+  const me = await requirePerm("jobbers", id ? "modify" : "write");
+  if (me.role === "JOBBER") return { error: "Not allowed" };
+  const parsed = jobberSchema.safeParse(input);
   if (!parsed.success) return { error: firstError(parsed.error) };
 
-  const jobber = id
-    ? await db.jobber.update({ where: { id, deletedAt: null }, data: parsed.data })
-    : await db.jobber.create({ data: parsed.data });
-  redirect(`/jobbers/${jobber.id}`);
-}
-
-export async function deleteJobber(id: string) {
-  await requireUser("ADMIN");
-  await db.jobber.update({ where: { id }, data: { deletedAt: new Date() } });
-  redirect("/jobbers");
+  if (id) await db.jobber.update({ where: { id, deletedAt: null }, data: parsed.data });
+  else await db.jobber.create({ data: parsed.data });
+  revalidatePath("/jobbers");
+  return {};
 }

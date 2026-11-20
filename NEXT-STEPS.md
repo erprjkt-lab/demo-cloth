@@ -11,7 +11,7 @@ What is still needed before the Job Challan app is usable, in the order to do it
   npm install
   npm run db:migrate -- --name init
   npm run db:seed
-  npm run dev -- -H 0.0.0.0
+  npm run dev
   ```
 - [ ] Commit the generated `prisma/migrations/` folder. Production applies these with `prisma migrate deploy`.
 

@@ -11,6 +11,7 @@ import {
   TeamOutlined,
   UserOutlined,
 } from "@ant-design/icons";
+import { Alert } from "antd";
 import { BRAND, BrandMark, BrandName } from "@/components/Brand";
 import { login } from "./actions";
 import "./login.css";
@@ -144,7 +145,7 @@ export default function LoginPage() {
                 screen.
               </p>
             )}
-            {state?.error && <p className="error mb-3">{state.error}</p>}
+            {state?.error && <Alert type="error" showIcon title={state.error} style={{ marginBottom: 12 }} />}
 
             <button className="cf-submit-btn" disabled={pending}>
               <span>{pending ? "Signing in…" : "Sign In"}</span>

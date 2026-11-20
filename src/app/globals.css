@@ -1,67 +1,47 @@
 @import "tailwindcss";
 
-/* CoreFlow design tokens (D:\ERP-FE\src\theme): azure brand, navy sidebar, slate neutrals. */
+/* Font names (loaded by the <link> in layout.tsx), used by antd's theme and the tokens below. */
+:root {
+  --font-inter: "Inter";
+  --font-space-grotesk: "Space Grotesk";
+  --font-plex-mono: "IBM Plex Mono";
+}
+
+/* Tokens for the few places outside antd (login page, brand mark). */
 @theme {
   --color-brand: #0289c3;
-  --color-brand-hover: #00a0e3;
-  --color-brand-dark: #017678;
   --color-navy: #0b132b;
-  --color-navy-deep: #080d1f;
-  --color-line: #eef2f6;
   --font-sans: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-display: var(--font-space-grotesk), var(--font-inter), -apple-system, sans-serif;
   --font-mono: var(--font-plex-mono), ui-monospace, "SFMono-Regular", Menlo, monospace;
 }
 
 body {
+  margin: 0;
   background: #f8fafc;
   color: #0f172a;
   font-family: var(--font-sans);
-  font-size: 14px;
 }
 
 h1,
-h2 {
+h2,
+h3,
+h4 {
   font-family: var(--font-display);
   letter-spacing: -0.01em;
 }
 
-@utility card {
-  @apply rounded-lg border border-line bg-white p-3.5 shadow-[0_1px_3px_rgba(15,23,42,0.06)];
-}
-@utility label {
-  @apply mb-1 block text-[13px] font-medium text-slate-600;
-}
-@utility input {
-  @apply min-h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm transition outline-none hover:border-slate-300 focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:bg-slate-50 disabled:text-slate-400;
-}
-@utility btn {
-  @apply inline-flex min-h-9 cursor-pointer items-center justify-center gap-1.5 rounded-md px-3.5 py-1.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50;
-}
-@utility btn-primary {
-  @apply btn bg-brand text-white shadow-[0_2px_8px_rgba(2,137,195,0.28)] hover:bg-brand-hover active:bg-brand-dark;
-}
-@utility btn-light {
-  @apply btn border border-slate-200 bg-white text-slate-700 hover:border-brand hover:text-brand;
-}
-@utility btn-danger {
-  @apply btn border border-red-300 bg-white text-red-600 hover:bg-red-50;
-}
-@utility error {
-  @apply rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700;
-}
-@utility ledger {
-  @apply font-mono tabular-nums;
-}
-
-/* Sidebar, as in CoreFlow's AppLayout */
+/* Sidebar, as in CoreFlow's index.css */
 .app-sidebar-scroll {
   scrollbar-width: none;
 }
 .app-sidebar-scroll::-webkit-scrollbar {
   display: none;
 }
-.nav-item-active::before {
+.app-sidebar-menu .ant-menu-item-selected {
+  position: relative;
+}
+.app-sidebar-menu .ant-menu-item-selected::before {
   content: "";
   position: absolute;
   left: 0;
@@ -71,4 +51,13 @@ h2 {
   border-radius: 0 3px 3px 0;
   background: #00a0e3;
   box-shadow: 0 0 10px rgba(0, 160, 227, 0.75);
+}
+.app-sidebar-menu .ant-menu-item-selected .anticon {
+  color: #00a0e3 !important;
+}
+
+/* Numbers that should line up in a column (CoreFlow "ledger" face). */
+.ledger {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }

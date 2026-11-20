@@ -1,21 +1,25 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { Alert, Button, Card, Col, Form, Input, Row, Segmented, Select, Space, Tag, Typography } from "antd";
+import { Ledger, PageHeader } from "@/components/ui";
 import { sumMeters } from "@/lib/validation";
 import { transferChallan } from "../../actions";
 
 type Line = { id: string; label: string; lumps: { id: string; seq: number; meters: string }[] };
 
 export function TransferForm({
-  challanId,
+  challan,
   lines,
   jobbers,
 }: {
-  challanId: string;
+  challan: { id: string; no: string; jobber: string };
   lines: Line[];
   jobbers: { id: string; name: string }[];
 }) {
-  const [toJobberId, setTo] = useState("");
+  const router = useRouter();
+  const [toJobberId, setTo] = useState<string>();
   const [type, setType] = useState<"FULL" | "PARTIAL">("FULL");
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [note, setNote] = useState("");
@@ -31,86 +35,111 @@ export function TransferForm({
   const all = lines.flatMap((l) => l.lumps);
   const moving = type === "FULL" ? all : all.filter((x) => picked.has(x.id));
 
-  function submit(e: React.FormEvent) {
-    e.preventDefault();
+  function submit() {
     setError("");
     start(async () => {
-      const res = await transferChallan(challanId, { toJobberId, type, lumpIds: [...picked], note });
+      const res = await transferChallan(challan.id, { toJobberId, type, lumpIds: [...picked], note });
       if (res?.error) setError(res.error);
     });
   }
 
   return (
-    <form onSubmit={submit} className="space-y-4">
-      <div className="card space-y-4">
-        <label className="block">
-          <span className="label">Move to jobber<span className="text-red-600"> *</span></span>
-          <select className="input" required value={toJobberId} onChange={(e) => setTo(e.target.value)}>
-            <option value="">Select jobber</option>
-            {jobbers.map((j) => (
-              <option key={j.id} value={j.id}>{j.name}</option>
-            ))}
-          </select>
-        </label>
-        <div className="grid grid-cols-2 gap-2">
-          <button type="button" className={type === "FULL" ? "btn-primary" : "btn-light"} onClick={() => setType("FULL")}>
-            Full transfer
-          </button>
-          <button type="button" className={type === "PARTIAL" ? "btn-primary" : "btn-light"} onClick={() => setType("PARTIAL")}>
-            Custom (lumps)
-          </button>
-        </div>
-      </div>
+    <>
+      <PageHeader
+        title={`Transfer ${challan.no}`}
+        subtitle={`Now with ${challan.jobber}`}
+        breadcrumbs={[
+          { label: "Challans", href: "/challans" },
+          { label: challan.no, href: `/challans/${challan.id}` },
+          { label: "Transfer" },
+        ]}
+        actions={<Button onClick={() => router.back()}>Cancel</Button>}
+      />
+
+      <Card style={{ marginBottom: 12 }}>
+        <Form layout="vertical">
+          <Row gutter={12}>
+            <Col xs={24} md={12}>
+              <Form.Item label="Move to jobber" required>
+                <Select
+                  showSearch
+                  optionFilterProp="label"
+                  placeholder="Select jobber"
+                  value={toJobberId}
+                  onChange={setTo}
+                  options={jobbers.map((j) => ({ value: j.id, label: j.name }))}
+                />
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={12}>
+              <Form.Item label="Transfer">
+                <Segmented
+                  block
+                  value={type}
+                  onChange={(v) => setType(v as "FULL" | "PARTIAL")}
+                  options={[
+                    { value: "FULL", label: "Full challan" },
+                    { value: "PARTIAL", label: "Selected lumps" },
+                  ]}
+                />
+              </Form.Item>
+            </Col>
+            <Col span={24}>
+              <Form.Item label="Note" style={{ marginBottom: 0 }}>
+                <Input value={note} maxLength={200} onChange={(e) => setNote(e.target.value)} />
+              </Form.Item>
+            </Col>
+          </Row>
+        </Form>
+      </Card>
 
       {type === "PARTIAL" &&
         lines.map((l) => {
           const allOn = l.lumps.every((x) => picked.has(x.id));
           return (
-            <div key={l.id} className="card">
-              <div className="mb-2 flex items-center justify-between">
-                <span className="font-semibold">{l.label}</span>
-                <button type="button" className="text-sm text-brand" onClick={() => toggle(l.lumps.map((x) => x.id), !allOn)}>
+            <Card
+              key={l.id}
+              size="small"
+              title={l.label}
+              style={{ marginBottom: 12 }}
+              extra={
+                <Button type="link" size="small" onClick={() => toggle(l.lumps.map((x) => x.id), !allOn)}>
                   {allOn ? "Clear" : "Select all"}
-                </button>
-              </div>
-              <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-6">
-                {l.lumps.map((x) => {
-                  const on = picked.has(x.id);
-                  return (
-                    <button
-                      type="button"
-                      key={x.id}
-                      aria-pressed={on}
-                      onClick={() => toggle([x.id], !on)}
-                      className={`rounded-md px-2 py-2 text-right text-sm tabular-nums ring-1 ${on ? "bg-brand text-white ring-brand" : "bg-white ring-slate-300"}`}
-                    >
-                      <span className="float-left text-[10px] opacity-60">{x.seq}</span>
-                      {x.meters}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+                </Button>
+              }
+            >
+              <Space size={[6, 6]} wrap>
+                {l.lumps.map((x) => (
+                  <Tag.CheckableTag
+                    key={x.id}
+                    checked={picked.has(x.id)}
+                    onChange={(on) => toggle([x.id], on)}
+                    style={{ border: "1px solid #E2E8F0", padding: "2px 8px" }}
+                  >
+                    <span style={{ opacity: 0.6, fontSize: 10 }}>{x.seq}</span> <Ledger>{x.meters}</Ledger>
+                  </Tag.CheckableTag>
+                ))}
+              </Space>
+            </Card>
           );
         })}
 
-      <div className="card">
-        <label className="block">
-          <span className="label">Note</span>
-          <input className="input" value={note} maxLength={200} onChange={(e) => setNote(e.target.value)} />
-        </label>
-      </div>
-
-      {error && <p className="error">{error}</p>}
-      <div className="sticky bottom-2 z-10 flex items-center gap-3 rounded-xl bg-navy p-3 text-white shadow-lg">
-        <div className="flex-1">
-          <div className="text-xs opacity-80">{moving.length} lumps moving</div>
-          <div className="text-xl font-bold tabular-nums">{sumMeters(moving.map((x) => x.meters))} m</div>
+      {error && <Alert type="error" showIcon title={error} style={{ marginBottom: 12 }} />}
+      <Card
+        size="small"
+        style={{ position: "sticky", bottom: 0, zIndex: 5, boxShadow: "0 -4px 16px rgba(15,23,42,0.08)" }}
+        styles={{ body: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 } }}
+      >
+        <div>
+          <Typography.Text type="secondary">{moving.length} lumps moving</Typography.Text>
+          <div style={{ fontSize: 20, fontWeight: 700 }}>
+            <Ledger>{sumMeters(moving.map((x) => x.meters))} m</Ledger>
+          </div>
         </div>
-        <button className="btn bg-white text-navy" disabled={pending || !moving.length}>
-          {pending ? "Moving…" : "Transfer"}
-        </button>
-      </div>
-    </form>
+        <Button type="primary" size="large" loading={pending} disabled={!moving.length || !toJobberId} onClick={submit}>
+          Transfer
+        </Button>
+      </Card>
+    </>
   );
 }

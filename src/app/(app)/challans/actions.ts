@@ -2,13 +2,16 @@
 
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { OFFICE, requireUser } from "@/lib/auth";
+import { revalidatePath } from "next/cache";
+import { requirePerm } from "@/lib/auth";
 import { challanNo, today } from "@/lib/format";
 import { challanSchema, firstError, sumMeters, transferSchema } from "@/lib/validation";
-import type { FormState } from "@/components/ActionForm";
+
+type FormState = { error?: string } | undefined;
 
 export async function createChallan(input: unknown): Promise<FormState> {
-  const user = await requireUser(...OFFICE);
+  const user = await requirePerm("challans", "write");
+  if (user.role === "JOBBER") return { error: "Not allowed" };
   const parsed = challanSchema.safeParse(input);
   if (!parsed.success) return { error: firstError(parsed.error) };
   const { date, lines, ...c } = parsed.data;
@@ -21,6 +24,9 @@ export async function createChallan(input: unknown): Promise<FormState> {
   if (!catalog) return { error: "Catalogue not found" };
   const designIds = new Set(catalog.designs.map((d) => d.id));
   if (!lines.every((l) => designIds.has(l.designId))) return { error: "A design does not belong to this catalogue" };
+  if (c.jobWorkId && !(await db.jobWork.findFirst({ where: { id: c.jobWorkId, jobberId: c.jobberId, deletedAt: null } }))) {
+    return { error: "That job work belongs to a different jobber" };
+  }
 
   // One nested create = one transaction. No totals are stored; they are always summed from lumps.
   const challan = await db.challan.create({
@@ -45,7 +51,8 @@ export async function createChallan(input: unknown): Promise<FormState> {
  * child challan (parentChallanId) for the new jobber; the original keeps the rest. Both log a Transfer.
  */
 export async function transferChallan(id: string, input: unknown): Promise<FormState> {
-  const user = await requireUser(...OFFICE);
+  const user = await requirePerm("transfers", "write");
+  if (user.role === "JOBBER") return { error: "Not allowed" };
   const parsed = transferSchema.safeParse(input);
   if (!parsed.success) return { error: firstError(parsed.error) };
   const { toJobberId, lumpIds, note } = parsed.data;
@@ -119,8 +126,9 @@ export async function transferChallan(id: string, input: unknown): Promise<FormS
   redirect(`/challans/${childId}`);
 }
 
-export async function deleteChallan(id: string) {
-  await requireUser("ADMIN");
+export async function deleteChallan(id: string): Promise<FormState> {
+  await requirePerm("challans", "delete");
   await db.challan.update({ where: { id }, data: { deletedAt: new Date() } });
-  redirect("/challans");
+  revalidatePath("/challans");
+  return {};
 }

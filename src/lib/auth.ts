@@ -3,8 +3,8 @@ import { cache } from "react";
 import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { getIronSession } from "iron-session";
-import type { Role } from "@prisma/client";
 import { db } from "./db";
+import { can, effectivePerms, type Action, type ModuleKey } from "./permissions";
 
 export const SESSION_COOKIE = "jc_session";
 
@@ -27,23 +27,41 @@ export const getUser = cache(async () => {
   if (!userId) return null;
   const user = await db.user.findUnique({
     where: { id: userId },
-    select: { id: true, name: true, username: true, role: true, jobberId: true, isActive: true },
+    select: {
+      id: true,
+      name: true,
+      username: true,
+      role: true,
+      jobberId: true,
+      isActive: true,
+      permissions: { select: { module: true, read: true, write: true, modify: true, delete: true, approve: true } },
+    },
   });
-  return user?.isActive ? user : null;
+  if (!user?.isActive) return null;
+  const { permissions, ...rest } = user;
+  return { ...rest, perms: effectivePerms(user.role, permissions) };
 });
 
 export type SessionUser = NonNullable<Awaited<ReturnType<typeof getUser>>>;
 
-/** Call first in every page, Server Action and route handler. Wrong role = 404. */
-export async function requireUser(...roles: Role[]): Promise<SessionUser> {
+/** Signed-in user or redirect to /login. */
+export async function requireUser(): Promise<SessionUser> {
   const user = await getUser();
   if (!user) redirect("/login");
-  if (roles.length && !roles.includes(user.role)) notFound();
   return user;
 }
 
-export const OFFICE: Role[] = ["ADMIN", "STAFF"];
+/** Call first in every page, Server Action and route handler. No access = 404. */
+export async function requirePerm(module: ModuleKey, action: Action = "read"): Promise<SessionUser> {
+  const user = await requireUser();
+  if (!can(user.perms, module, action)) notFound();
+  return user;
+}
 
-/** Prisma `where` for challans this user may see: jobbers only their own. */
-export const challanScope = (user: SessionUser) =>
+/** Prisma `where` for challans and job work this user may see: jobbers only their own. */
+export const jobberScope = (user: SessionUser) =>
   user.role === "JOBBER" ? { jobberId: user.jobberId ?? "-" } : {};
+
+/** Job work a user may see: jobbers only their own, and never drafts (not approved yet). */
+export const jobScope = (user: SessionUser) =>
+  user.role === "JOBBER" ? { jobberId: user.jobberId ?? "-", status: { not: "DRAFT" as const } } : {};

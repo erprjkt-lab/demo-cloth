@@ -1,13 +1,15 @@
 "use server";
 
-import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import { OFFICE, requireUser } from "@/lib/auth";
+import { requirePerm } from "@/lib/auth";
 import { catalogSchema, firstError, SIZES } from "@/lib/validation";
-import type { FormState } from "@/components/ActionForm";
 
-export async function saveCatalog(id: string | null, input: unknown): Promise<FormState> {
-  await requireUser(...OFFICE);
+type Result = { error?: string };
+
+export async function saveCatalog(id: string | null, input: unknown): Promise<Result> {
+  const me = await requirePerm("catalogs", id ? "modify" : "write");
+  if (me.role === "JOBBER") return { error: "Not allowed" };
   const parsed = catalogSchema.safeParse(input);
   if (!parsed.success) return { error: firstError(parsed.error) };
 
@@ -17,14 +19,15 @@ export async function saveCatalog(id: string | null, input: unknown): Promise<Fo
   const sizeRows = SIZES.map((size) => ({ size, qty: sizes[size] ?? 0 }));
 
   if (!id) {
-    const created = await db.catalog.create({
+    await db.catalog.create({
       data: {
         ...data,
         sizes: { create: sizeRows },
         designs: { create: designs.map((d) => ({ colourName: d.colourName })) },
       },
     });
-    redirect(`/catalogs/${created.id}`);
+    revalidatePath("/catalogs");
+    return {};
   }
 
   const keep = designs.flatMap((d) => (d.id ? [d.id] : []));
@@ -47,11 +50,13 @@ export async function saveCatalog(id: string | null, input: unknown): Promise<Fo
       }),
     ),
   ]);
-  redirect(`/catalogs/${id}`);
+  revalidatePath("/catalogs");
+  return {};
 }
 
-export async function deleteCatalog(id: string) {
-  await requireUser("ADMIN");
+export async function deleteCatalog(id: string): Promise<Result> {
+  await requirePerm("catalogs", "delete");
   await db.catalog.update({ where: { id }, data: { deletedAt: new Date() } });
-  redirect("/catalogs");
+  revalidatePath("/catalogs");
+  return {};
 }

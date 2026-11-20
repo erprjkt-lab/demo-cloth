@@ -1,15 +1,11 @@
 import type { Metadata, Viewport } from "next";
-import { IBM_Plex_Mono, Inter, Space_Grotesk } from "next/font/google";
+import { AntdRegistry } from "@ant-design/nextjs-registry";
+import { AntdProvider } from "@/components/AntdProvider";
 import "./globals.css";
-
-// Same faces as CoreFlow ERP: Inter for UI, Space Grotesk for headings, Plex Mono for numbers.
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
-const display = Space_Grotesk({ subsets: ["latin"], weight: ["500", "600", "700"], variable: "--font-space-grotesk" });
-const mono = IBM_Plex_Mono({ subsets: ["latin"], weight: ["400", "500", "600"], variable: "--font-plex-mono" });
 
 export const metadata: Metadata = {
   title: "Job Challan · Yash Enterprise",
-  description: "Fabric challans for stitching jobbers",
+  description: "Fabric challans and job work for stitching jobbers",
   appleWebApp: { capable: true, title: "Job Challan", statusBarStyle: "default" },
 };
 
@@ -17,8 +13,23 @@ export const viewport: Viewport = { width: "device-width", initialScale: 1, them
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${inter.variable} ${display.variable} ${mono.variable}`}>
-      <body className="antialiased">{children}</body>
+    <html lang="en">
+      <head>
+        {/* Same faces as CoreFlow ERP, loaded the same way: by the browser, so a build never
+            depends on reaching Google and an offline font just falls back to the system one. */}
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+        {/* eslint-disable-next-line @next/next/no-page-custom-font */}
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+        />
+      </head>
+      <body>
+        <AntdRegistry>
+          <AntdProvider>{children}</AntdProvider>
+        </AntdRegistry>
+      </body>
     </html>
   );
 }

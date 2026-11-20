@@ -1,0 +1,57 @@
+// Job work status flow. Pure data, shared by the tables (client) and the status actions (server).
+
+export const JOB_STEPS = ["DRAFT", "ASSIGNED", "MATERIAL_RECEIVED", "IN_PROGRESS", "FINISHED", "SENT_BACK", "COMPLETED"] as const;
+export type JobStatus = (typeof JOB_STEPS)[number];
+
+export const JOB_STATUS: Record<JobStatus, { label: string; color: string }> = {
+  DRAFT: { label: "Draft", color: "gold" },
+  ASSIGNED: { label: "Assigned", color: "default" },
+  MATERIAL_RECEIVED: { label: "Material Received", color: "cyan" },
+  IN_PROGRESS: { label: "In Progress", color: "processing" },
+  FINISHED: { label: "Finished", color: "purple" },
+  SENT_BACK: { label: "Sent Back", color: "orange" },
+  COMPLETED: { label: "Completed", color: "green" },
+};
+
+/** The button that moves a job to its next step, and who takes that step. */
+export const NEXT_STEP: Partial<Record<JobStatus, { label: string; by: "APPROVER" | "JOBBER" | "OFFICE" }>> = {
+  DRAFT: { label: "Approve & Assign", by: "APPROVER" },
+  ASSIGNED: { label: "Material Received", by: "JOBBER" },
+  MATERIAL_RECEIVED: { label: "Start Work", by: "JOBBER" },
+  IN_PROGRESS: { label: "Mark Finished", by: "JOBBER" },
+  FINISHED: { label: "Send Back", by: "JOBBER" },
+  SENT_BACK: { label: "Confirm Received", by: "OFFICE" },
+};
+
+export const nextStatus = (s: JobStatus): JobStatus | undefined => JOB_STEPS[JOB_STEPS.indexOf(s) + 1];
+
+/** Jobs that can still move to another jobber: the goods haven't been finished or sent back. */
+export const TRANSFERABLE: JobStatus[] = ["DRAFT", "ASSIGNED", "MATERIAL_RECEIVED", "IN_PROGRESS"];
+
+/**
+ * Jobbers may only take their own next step. Office users with modify access may take any
+ * step, including corrections backwards. Draft is entered only on create and left only through
+ * approval (approveJob), never through a plain status change.
+ */
+export function canSetStatus(role: "ADMIN" | "STAFF" | "JOBBER", from: JobStatus, to: JobStatus) {
+  if (from === "DRAFT" || to === "DRAFT") return false;
+  if (role !== "JOBBER") return from !== to;
+  return nextStatus(from) === to && NEXT_STEP[from]?.by === "JOBBER";
+}
+
+export const jobNo = (no: number) => `JW-${String(no).padStart(4, "0")}`;
+
+// Quality check when a job comes back (Sent Back → Confirm Received).
+export const QC_RESULT = {
+  PASSED: { label: "QC passed", color: "green" },
+  ISSUES_ACCEPTED: { label: "Accepted with issues", color: "orange" },
+  REWORK: { label: "Sent for rework", color: "red" },
+} as const;
+export type QcResult = keyof typeof QC_RESULT;
+
+export const QC_ISSUE_TYPES = ["MISSING", "DEFECTIVE", "NOT_DONE"] as const;
+export const QC_ISSUE_LABEL: Record<(typeof QC_ISSUE_TYPES)[number], string> = {
+  MISSING: "Missing",
+  DEFECTIVE: "Defective",
+  NOT_DONE: "Not done properly",
+};

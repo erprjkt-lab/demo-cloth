@@ -1,98 +1,59 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
-import { OFFICE, requireUser } from "@/lib/auth";
-import { Empty, PageHeader } from "@/components/ui";
-import { ChallanCard, challanCardInclude, challanTotal } from "@/components/ChallanCard";
+import { requirePerm } from "@/lib/auth";
+import { can } from "@/lib/permissions";
+import { challanRowInclude, toChallanRow } from "@/lib/rows";
 import { sumMeters } from "@/lib/validation";
-import { deleteJobber } from "../actions";
+import { JobberDetail } from "./JobberDetail";
 
 export default async function JobberPage({ params }: { params: Promise<{ id: string }> }) {
-  const user = await requireUser(...OFFICE);
+  const me = await requirePerm("jobbers");
   const { id } = await params;
   const jobber = await db.jobber.findFirst({
     where: { id, deletedAt: null },
     include: {
-      challans: { where: { deletedAt: null }, orderBy: { no: "desc" }, include: challanCardInclude },
+      challans: { where: { deletedAt: null }, orderBy: { no: "desc" }, include: challanRowInclude },
+      jobs: {
+        where: { deletedAt: null },
+        orderBy: { no: "desc" },
+        include: {
+          catalog: { select: { name: true, volume: true } },
+          qcs: { orderBy: { createdAt: "desc" }, take: 1, select: { receivedPieces: true, rejectedPieces: true, missingPieces: true } },
+        },
+      },
     },
   });
   if (!jobber) notFound();
 
+  const challans = jobber.challans.map(toChallanRow);
   // Meters and challan count per catalogue, from the challans already loaded.
-  const byCatalog = new Map<string, { id: string; name: string; count: number; totals: string[] }>();
-  for (const c of jobber.challans) {
-    const h = byCatalog.get(c.catalogId) ?? {
-      id: c.catalogId,
-      name: `${c.catalog.name} ${c.catalog.volume ?? ""}`,
-      count: 0,
-      totals: [],
-    };
-    h.count++;
-    h.totals.push(challanTotal(c));
-    byCatalog.set(c.catalogId, h);
+  const history = new Map<string, { id: string; catalog: string; challans: number; meters: string[] }>();
+  for (const c of challans) {
+    const h = history.get(c.catalogId) ?? { id: c.catalogId, catalog: c.catalog, challans: 0, meters: [] };
+    h.challans++;
+    h.meters.push(c.meters);
+    history.set(c.catalogId, h);
   }
-  const history = [...byCatalog.values()];
 
+  const { id: jobberId, name, ownerName, gstNo, mobile1, mobile2, address, jobs } = jobber;
   return (
-    <>
-      <PageHeader
-        title={jobber.name}
-        back="/jobbers"
-        action={<Link href={`/jobbers/${id}/edit`} className="btn-light">Edit</Link>}
-      />
-      <dl className="card mb-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
-        {(
-          [
-            ["Owner", jobber.ownerName],
-            ["GST no", jobber.gstNo],
-            ["Mobile", [jobber.mobile1, jobber.mobile2].filter(Boolean).join(", ")],
-            ["Address", jobber.address],
-          ] as const
-        ).map(([k, v]) => (
-          <div key={k} className="contents">
-            <dt className="text-slate-500">{k}</dt>
-            <dd>
-              {k === "Mobile" ? (
-                <a href={`tel:${jobber.mobile1}`} className="text-brand">{v}</a>
-              ) : (
-                v || "—"
-              )}
-            </dd>
-          </div>
-        ))}
-      </dl>
-
-      {history.length > 0 && (
-        <>
-          <h2 className="mb-2 font-semibold">Catalogue history</h2>
-          <div className="card mb-4 divide-y divide-slate-100 p-0">
-            {history.map((h) => (
-              <Link key={h.id} href={`/catalogs/${h.id}`} className="flex justify-between px-4 py-2.5 text-sm">
-                <span>{h.name}</span>
-                <span className="tabular-nums">
-                  {h.count} challans · <b>{sumMeters(h.totals)} m</b>
-                </span>
-              </Link>
-            ))}
-          </div>
-        </>
-      )}
-
-      <h2 className="mb-2 font-semibold">Challans ({jobber.challans.length})</h2>
-      {jobber.challans.length === 0 && <Empty>No challans for this jobber</Empty>}
-      <ul className="space-y-2">
-        {jobber.challans.map((c) => (
-          <li key={c.id}>
-            <ChallanCard c={c} />
-          </li>
-        ))}
-      </ul>
-
-      {user.role === "ADMIN" && (
-        <form action={deleteJobber.bind(null, id)} className="mt-8">
-          <button className="btn-danger w-full">Delete jobber</button>
-        </form>
-      )}
-    </>
+    <JobberDetail
+      jobber={{ id: jobberId, name, ownerName, gstNo, mobile1, mobile2, address }}
+      canModify={can(me.perms, "jobbers", "modify")}
+      challans={challans}
+      catalogs={[...history.values()].map((h) => ({ ...h, meters: sumMeters(h.meters) }))}
+      jobs={jobs.map((j) => ({
+        id: j.id,
+        no: j.no,
+        title: j.title,
+        catalog: j.catalog ? `${j.catalog.name} ${j.catalog.volume ?? ""}`.trim() : null,
+        pieces: j.pieces,
+        dueDate: j.dueDate?.toISOString().slice(0, 10) ?? null,
+        status: j.status,
+        received: j.qcs[0]?.receivedPieces ?? null,
+        rejected: j.qcs[0]?.rejectedPieces ?? null,
+        notReceived: j.qcs[0]?.missingPieces ?? null,
+      }))}
+    />
   );
 }

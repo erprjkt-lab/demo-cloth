@@ -1,46 +1,27 @@
-import Link from "next/link";
-import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { challanScope, requireUser } from "@/lib/auth";
-import { Empty, PageHeader, SearchBox } from "@/components/ui";
-import { ChallanCard, challanCardInclude } from "@/components/ChallanCard";
+import { jobberScope, requirePerm } from "@/lib/auth";
+import { can } from "@/lib/permissions";
+import { challanRowInclude, toChallanRow } from "@/lib/rows";
+import { ChallansClient } from "./ChallansClient";
 
-export default async function ChallansPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
-  const user = await requireUser();
-  const { q } = await searchParams;
-
-  // "CH-0012", "ch12" or "12" search by number; anything else by jobber or catalogue name.
-  const num = q?.match(/^\s*(?:ch-?)?0*(\d+)\s*$/i)?.[1];
-  const like = { contains: q, mode: "insensitive" as const };
-  const search: Prisma.ChallanWhereInput = !q
-    ? {}
-    : num
-      ? { no: Number(num) }
-      : { OR: [{ jobber: { name: like } }, { catalog: { name: like } }] };
-
-  // ponytail: newest 100 only; add paging once there are more challans than that.
+export default async function ChallansPage() {
+  const me = await requirePerm("challans");
+  // ponytail: newest 500 only; move search to the server once there are more challans than that.
   const challans = await db.challan.findMany({
-    where: { deletedAt: null, ...challanScope(user), ...search },
+    where: { deletedAt: null, ...jobberScope(me) },
     orderBy: { no: "desc" },
-    take: 100,
-    include: challanCardInclude,
+    take: 500,
+    include: challanRowInclude,
   });
+  const office = me.role !== "JOBBER";
 
   return (
-    <>
-      <PageHeader
-        title={user.role === "JOBBER" ? "My challans" : "Challans"}
-        action={user.role !== "JOBBER" && <Link href="/challans/new" className="btn-primary">+ New</Link>}
-      />
-      <SearchBox q={q} placeholder={user.role === "JOBBER" ? "Challan no" : "Challan no, jobber or catalogue"} />
-      {challans.length === 0 && <Empty>No challans found</Empty>}
-      <ul className="space-y-2">
-        {challans.map((c) => (
-          <li key={c.id}>
-            <ChallanCard c={c} />
-          </li>
-        ))}
-      </ul>
-    </>
+    <ChallansClient
+      rows={challans.map(toChallanRow)}
+      jobber={!office}
+      canCreate={office && can(me.perms, "challans", "write")}
+      canTransfer={office && can(me.perms, "transfers", "write")}
+      canDelete={can(me.perms, "challans", "delete")}
+    />
   );
 }
