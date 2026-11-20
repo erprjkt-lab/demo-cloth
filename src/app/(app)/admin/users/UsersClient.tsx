@@ -73,7 +73,7 @@ export function UsersClient({
     <>
       <PageHeader
         title="Users"
-        subtitle="Logins for office staff and jobbers. Set what each user can do under Permissions."
+        subtitle="Logins for office staff and jobbers"
         breadcrumbs={[{ label: "Administration" }, { label: "Users" }]}
         actions={
           canWrite && (

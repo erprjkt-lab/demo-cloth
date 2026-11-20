@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { requirePerm } from "@/lib/auth";
 import { challanNo, today } from "@/lib/format";
+import { activeMasters } from "@/lib/masters";
 import { challanSchema, firstError, sumMeters, transferSchema } from "@/lib/validation";
 
 type FormState = { error?: string } | undefined;
@@ -24,6 +25,7 @@ export async function createChallan(input: unknown): Promise<FormState> {
   if (!catalog) return { error: "Catalogue not found" };
   const designIds = new Set(catalog.designs.map((d) => d.id));
   if (!lines.every((l) => designIds.has(l.designId))) return { error: "A design does not belong to this catalogue" };
+  if (!(await activeMasters("PART", lines.map((l) => l.partId)))) return { error: "Pick a part from the list on every line" };
   if (c.jobWorkId && !(await db.jobWork.findFirst({ where: { id: c.jobWorkId, jobberId: c.jobberId, deletedAt: null } }))) {
     return { error: "That job work belongs to a different jobber" };
   }
@@ -37,7 +39,7 @@ export async function createChallan(input: unknown): Promise<FormState> {
       lines: {
         create: lines.map((l) => ({
           designId: l.designId,
-          partType: l.partType,
+          partId: l.partId,
           lumps: { create: l.lumps.map((meters, i) => ({ seq: i + 1, meters })) },
         })),
       },
@@ -106,7 +108,7 @@ export async function transferChallan(id: string, input: unknown): Promise<FormS
       });
       for (const { line, lumps } of moving) {
         const newLine = await tx.challanLine.create({
-          data: { challanId: child.id, designId: line.designId, partType: line.partType },
+          data: { challanId: child.id, designId: line.designId, partId: line.partId },
         });
         // lineId in the filter guards against a concurrent transfer of the same lumps.
         const moved = await tx.lump.updateMany({

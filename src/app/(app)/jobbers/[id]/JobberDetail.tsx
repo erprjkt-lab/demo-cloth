@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { EditOutlined } from "@ant-design/icons";
 import { Button, Card, Descriptions, Tabs } from "antd";
-import { DataTable, JobStatusTag, Ledger, PageHeader } from "@/components/ui";
+import { DataTable, JobStatusDot, Ledger, PageHeader } from "@/components/ui";
 import { ChallanTable } from "@/components/ChallanTable";
 import { fmtDate } from "@/lib/format";
 import { jobNo, type JobStatus } from "@/lib/jobs";
@@ -98,7 +98,7 @@ export function JobberDetail({
                     { title: "Rejected", dataIndex: "rejected", align: "right", render: (v) => count(v, "#DC2626") },
                     { title: "Not received", dataIndex: "notReceived", align: "right", render: (v) => count(v, "#D97706") },
                     { title: "Due", dataIndex: "dueDate", render: (d) => (d ? fmtDate(new Date(d)) : "—") },
-                    { title: "Status", dataIndex: "status", render: (s) => <JobStatusTag status={s} /> },
+                    { title: "Status", dataIndex: "status", render: (s) => <JobStatusDot status={s} /> },
                   ]}
                 />
               ),

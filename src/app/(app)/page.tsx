@@ -1,8 +1,7 @@
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { challanNo } from "@/lib/format";
-import { JOB_STEPS } from "@/lib/jobs";
+import { TZ } from "@/lib/format";
 import { can } from "@/lib/permissions";
 import { Dashboard } from "./Dashboard";
 
@@ -29,11 +28,8 @@ export default async function DashboardPage() {
         no: true,
         title: true,
         status: true,
-        pieces: true,
         dueDate: true,
-        updatedAt: true,
         jobber: { select: { name: true } },
-        catalog: { select: { name: true, volume: true } },
       },
     }),
     // Open tasks due within a week, overdue ones included.
@@ -46,34 +42,27 @@ export default async function DashboardPage() {
         title: true,
         dueAt: true,
         assignedTo: { select: { name: true } },
-        challan: { select: { id: true, no: true } },
       },
     }),
   ]);
 
+  const count = (...st: string[]) => byStatus.filter((b) => st.includes(b.status)).reduce((n, b) => n + b._count, 0);
+  const hour = Number(now.toLocaleString("en-GB", { hour: "2-digit", hourCycle: "h23", timeZone: TZ }));
+  const part = hour < 12 ? "morning" : hour < 17 ? "afternoon" : "evening";
+
   return (
     <Dashboard
-      name={me.name}
-      kpis={{ dueReminders, openIssues }}
-      jobsByStatus={JOB_STEPS.map((s) => ({ status: s, count: byStatus.find((b) => b.status === s)?._count ?? 0 }))}
-      running={running.map((j) => ({
-        id: j.id,
-        no: j.no,
-        title: j.title,
-        status: j.status,
-        pieces: j.pieces,
-        dueDate: j.dueDate,
-        updatedAt: j.updatedAt,
-        jobber: j.jobber.name,
-        catalog: j.catalog ? `${j.catalog.name} ${j.catalog.volume ?? ""}`.trim() : null,
-      }))}
-      upcoming={upcoming.map((t) => ({
-        id: t.id,
-        title: t.title,
-        dueAt: t.dueAt!,
-        assignedTo: t.assignedTo.name,
-        challan: t.challan && { id: t.challan.id, no: challanNo(t.challan.no) },
-      }))}
+      greeting={`Good ${part}, ${me.name.split(" ")[0]}`}
+      today={now.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: TZ })}
+      counts={{
+        running: count(...RUNNING),
+        drafts: count("DRAFT"),
+        toReceive: count("SENT_BACK"),
+        openIssues,
+        dueReminders,
+      }}
+      running={running.map((j) => ({ id: j.id, no: j.no, title: j.title, status: j.status, dueDate: j.dueDate, jobber: j.jobber.name }))}
+      upcoming={upcoming.map((t) => ({ id: t.id, title: t.title, dueAt: t.dueAt!, assignedTo: t.assignedTo.name }))}
     />
   );
 }

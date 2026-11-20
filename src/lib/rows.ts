@@ -10,7 +10,7 @@ export const challanRowInclude = {
   catalog: { select: { name: true, volume: true } },
   jobWork: { select: { id: true, no: true } },
   createdBy: { select: { name: true } },
-  lines: { select: { designId: true, partType: true, lumps: { select: { meters: true } } } },
+  lines: { select: { designId: true, partId: true, lumps: { select: { meters: true } } } },
 } satisfies Prisma.ChallanInclude;
 
 type ChallanWithRows = Prisma.ChallanGetPayload<{ include: typeof challanRowInclude }>;

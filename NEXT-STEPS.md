@@ -15,6 +15,17 @@ What is still needed before the Job Challan app is usable, in the order to do it
   ```
 - [ ] Commit the generated `prisma/migrations/` folder. Production applies these with `prisma migrate deploy`.
 
+### Database made before Masters existed (Nov 2026)
+
+Parts and catalogue types moved from fixed values into the **Masters** table. On a database that still has the old columns, run this once, then push the schema:
+
+```
+npx tsx scripts/migrate-masters.ts
+npx prisma db push
+```
+
+The script keeps every challan line and catalogue on the same part or type, and does nothing on a database that is already migrated or brand new. (The shared db.prisma.io database is already migrated.) A brand-new database only needs `npx prisma db push` and `npm run db:seed`.
+
 ## 2. The `.env` file
 
 `.env` is git-ignored and never committed. Copy `.env.example` and fill in:

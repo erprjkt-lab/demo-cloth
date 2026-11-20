@@ -4,7 +4,7 @@ import { jobberScope, requirePerm } from "@/lib/auth";
 import { challanNo, fmtDate, fmtDateTime } from "@/lib/format";
 import { jobNo } from "@/lib/jobs";
 import { can } from "@/lib/permissions";
-import { PART_LABEL, PARTS, sumMeters } from "@/lib/validation";
+import { sumMeters } from "@/lib/validation";
 import { ChallanDetail } from "./ChallanDetail";
 
 export default async function ChallanPage({ params }: { params: Promise<{ id: string }> }) {
@@ -18,7 +18,7 @@ export default async function ChallanPage({ params }: { params: Promise<{ id: st
       catalog: { select: { name: true, volume: true } },
       createdBy: { select: { name: true } },
       jobWork: { select: { no: true, title: true } },
-      lines: { include: { design: true, lumps: { orderBy: { seq: "asc" } } } },
+      lines: { include: { design: true, part: { select: { name: true, sort: true } }, lumps: { orderBy: { seq: "asc" } } } },
       parent: { select: { id: true, no: true } },
       children: { where: { deletedAt: null }, select: { id: true, no: true } },
       transfers: {
@@ -30,13 +30,13 @@ export default async function ChallanPage({ params }: { params: Promise<{ id: st
   if (!c) notFound();
 
   const lines = [...c.lines]
-    .sort((a, b) => a.design.colourName.localeCompare(b.design.colourName) || PARTS.indexOf(a.partType) - PARTS.indexOf(b.partType))
+    .sort((a, b) => a.design.colourName.localeCompare(b.design.colourName) || a.part.sort - b.part.sort)
     .map((l) => {
       const meters = l.lumps.map((x) => x.meters.toString());
       return {
         id: l.id,
         design: l.design.colourName,
-        part: PART_LABEL[l.partType],
+        part: l.part.name,
         lumps: l.lumps.map((x) => ({ seq: x.seq, meters: x.meters.toString() })),
         total: sumMeters(meters),
       };

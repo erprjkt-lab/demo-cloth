@@ -1,11 +1,12 @@
 import { db } from "@/lib/db";
 import { jobScope, requirePerm } from "@/lib/auth";
+import { QC_ISSUE_LABEL } from "@/lib/jobs";
 import { can } from "@/lib/permissions";
 import { JobsClient } from "./JobsClient";
 
-export default async function JobsPage({ searchParams }: { searchParams: Promise<{ view?: string }> }) {
+export default async function JobsPage({ searchParams }: { searchParams: Promise<{ view?: string; tab?: string; new?: string }> }) {
   const me = await requirePerm("jobs");
-  const { view } = await searchParams;
+  const { view, tab, new: openNew } = await searchParams;
   const office = me.role !== "JOBBER";
   const canEdit = office && (can(me.perms, "jobs", "write") || can(me.perms, "jobs", "modify"));
 
@@ -21,7 +22,7 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
         _count: { select: { challans: { where: { deletedAt: null } } } },
         qcs: {
           orderBy: { createdAt: "desc" },
-          select: { result: true, receivedPieces: true, missingPieces: true, rejectedPieces: true, issues: { where: { resolvedAt: null }, select: { id: true } } },
+          select: { result: true, receivedPieces: true, missingPieces: true, rejectedPieces: true, issues: { where: { resolvedAt: null }, select: { type: true, qty: true, note: true } } },
         },
       },
     }),
@@ -37,6 +38,8 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
       perms={me.perms.jobs ?? []}
       canTransfer={office && can(me.perms, "transfers", "write")}
       initialViewId={view}
+      initialTab={tab}
+      openNew={openNew === "1"}
       jobbers={jobbers}
       catalogs={catalogs.map((c) => ({ id: c.id, name: `${c.name} ${c.volume ?? ""}`.trim() }))}
       rows={jobs.map((j) => ({
@@ -58,6 +61,11 @@ export default async function JobsPage({ searchParams }: { searchParams: Promise
         rejected: j.qcs[0]?.rejectedPieces ?? null,
         notReceived: j.qcs[0]?.missingPieces ?? null,
         openIssues: j.qcs.reduce((n, q) => n + q.issues.length, 0),
+        // Sent back for rework: what the jobber has to fix, in one line ("10 missing, 5 loose stitching").
+        fix:
+          j.qcs[0]?.result === "REWORK" && j.status !== "COMPLETED"
+            ? j.qcs[0].issues.map((i) => [i.qty, (i.note || QC_ISSUE_LABEL[i.type]).toLowerCase()].filter(Boolean).join(" ")).join(", ") || null
+            : null,
         updatedAt: j.updatedAt,
       }))}
     />

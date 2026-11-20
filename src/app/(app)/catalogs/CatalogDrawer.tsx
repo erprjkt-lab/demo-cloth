@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
-import { Alert, Button, Col, Drawer, Form, Input, InputNumber, Row, Segmented, Space, Typography } from "antd";
+import { Alert, Button, Col, Drawer, Form, Input, InputNumber, Row, Space, Typography } from "antd";
 import { PhotoInput, type Photo } from "@/components/PhotoInput";
-import { useRun, useDrawerSize } from "@/components/ui";
-import { CATALOG_TYPE_LABEL, CATALOG_TYPES, SIZE_LABEL, SIZES } from "@/lib/validation";
+import { MasterPicker, useRun, useDrawerSize } from "@/components/ui";
+import type { MasterOption } from "@/lib/masters";
+import { SIZE_LABEL, SIZES } from "@/lib/validation";
 import { saveCatalog } from "./actions";
 
 export type CatalogInput = {
@@ -14,7 +15,8 @@ export type CatalogInput = {
   volume: string | null;
   code: string | null;
   fabric: string | null;
-  type: (typeof CATALOG_TYPES)[number];
+  typeId: string;
+  typeName: string;
   piecesPerDesign: number;
   designs: { id: string; colourName: string }[];
   sizes: Partial<Record<(typeof SIZES)[number], number>>;
@@ -22,7 +24,16 @@ export type CatalogInput = {
 };
 
 /** Create (catalog = null) or edit a catalogue. open = catalog !== undefined. */
-export function CatalogDrawer({ catalog, onClose }: { catalog: CatalogInput | null | undefined; onClose: () => void }) {
+export function CatalogDrawer({
+  catalog,
+  types,
+  onClose,
+}: {
+  catalog: CatalogInput | null | undefined;
+  /** Catalogue types from Masters. */
+  types: MasterOption[];
+  onClose: () => void;
+}) {
   const run = useRun();
   const [form] = Form.useForm();
   const [saving, setSaving] = useState(false);
@@ -34,8 +45,8 @@ export function CatalogDrawer({ catalog, onClose }: { catalog: CatalogInput | nu
   useEffect(() => {
     if (catalog === undefined) return;
     form.resetFields();
-    form.setFieldsValue(catalog ?? { type: "SINGLE", designs: [{ colourName: "" }], sizes: {} });
-  }, [catalog, form]);
+    form.setFieldsValue(catalog ?? { typeId: types.find((t) => t.isActive)?.id, designs: [{ colourName: "" }], sizes: {} });
+  }, [catalog, form, types]);
 
   async function submit() {
     const { photo, ...v } = await form.validateFields();
@@ -91,8 +102,8 @@ export function CatalogDrawer({ catalog, onClose }: { catalog: CatalogInput | nu
             </Form.Item>
           </Col>
           <Col xs={24} md={12}>
-            <Form.Item name="type" label="Type">
-              <Segmented block options={CATALOG_TYPES.map((t) => ({ value: t, label: CATALOG_TYPE_LABEL[t] }))} />
+            <Form.Item name="typeId" label="Type" rules={[{ required: true, message: "Pick a type (types are set up under Masters)" }]}>
+              <MasterPicker options={types} />
             </Form.Item>
           </Col>
           <Col xs={24} md={12}>

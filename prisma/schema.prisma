@@ -14,12 +14,6 @@ enum Role {
   JOBBER
 }
 
-enum CatalogType {
-  SINGLE
-  TWO_PC
-  THREE_PC
-}
-
 enum Size {
   S
   M
@@ -31,10 +25,10 @@ enum Size {
   XXXXXL
 }
 
-enum PartType {
-  TOP
-  PANT
-  DUPATTA
+// Admin-editable lists, managed on the Masters page.
+enum MasterKind {
+  PART // garment part on a challan line: Top, Pant, Dupatta…
+  CATALOG_TYPE // Single, 2 pcs, 3 pcs…
 }
 
 enum ChallanStatus {
@@ -124,20 +118,21 @@ model Jobber {
 }
 
 model Catalog {
-  id              String      @id @default(cuid())
+  id              String     @id @default(cuid())
   name            String
   volume          String?
   code            String?
   fabric          String?
-  type            CatalogType
+  typeId          String
+  type            MasterItem @relation(fields: [typeId], references: [id])
   designCount     Int
   piecesPerDesign Int
   totalPieces     Int
   photoUrl        String?
   photoPublicId   String?
   deletedAt       DateTime?
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
 
   sizes    CatalogSize[]
   designs  Design[]
@@ -200,14 +195,32 @@ model Challan {
 }
 
 model ChallanLine {
-  id        String   @id @default(cuid())
+  id        String     @id @default(cuid())
   challanId String
-  challan   Challan  @relation(fields: [challanId], references: [id], onDelete: Cascade)
+  challan   Challan    @relation(fields: [challanId], references: [id], onDelete: Cascade)
   designId  String
-  design    Design   @relation(fields: [designId], references: [id])
-  partType  PartType
+  design    Design     @relation(fields: [designId], references: [id])
+  partId    String
+  part      MasterItem @relation(fields: [partId], references: [id])
 
   lumps Lump[]
+}
+
+/// One entry of a master list. Records point at it by id, so a rename shows everywhere;
+/// hiding (isActive = false) removes it from pickers but keeps old records intact.
+model MasterItem {
+  id        String     @id @default(cuid())
+  kind      MasterKind
+  name      String
+  sort      Int        @default(0)
+  isActive  Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  challanLines ChallanLine[]
+  catalogs     Catalog[]
+
+  @@unique([kind, name])
 }
 
 model Lump {

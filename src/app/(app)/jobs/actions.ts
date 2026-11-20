@@ -128,6 +128,7 @@ export async function getJobDetail(id: string) {
   });
   if (!job) return null;
   return {
+    id: job.id,
     createdBy: job.createdBy.name,
     createdAt: job.createdAt,
     logs: job.logs.map((l) => ({ id: l.id, status: l.status, note: l.note, by: l.user.name, at: l.createdAt })),

@@ -1,34 +1,33 @@
 "use client";
 
+// One shell for every screen size (design system):
+// desktop: navy sidebar with names · tablet: the same sidebar as a 72px icon rail · phone: a top bar with ☰ that opens it.
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  AppstoreOutlined,
   BookOutlined,
   CheckSquareOutlined,
   CloseOutlined,
   DashboardOutlined,
-  DownOutlined,
   FileTextOutlined,
   LogoutOutlined,
-  MenuFoldOutlined,
   MenuOutlined,
-  MenuUnfoldOutlined,
   SafetyCertificateOutlined,
   ScissorOutlined,
   SwapOutlined,
   TeamOutlined,
-  UserOutlined,
   UsergroupAddOutlined,
 } from "@ant-design/icons";
-import { Avatar, Badge, Button, Drawer, Dropdown, Grid, Layout, Menu, Typography, theme } from "antd";
+import { Avatar, Button, Drawer, Dropdown, Layout, Menu } from "antd";
 import type { MenuProps } from "antd";
-import { BrandMark } from "@/components/Brand";
+import { BRAND, BrandMark } from "@/components/Brand";
+import { useScreen } from "@/components/ui";
 import { can, type ModuleKey, type PermMap } from "@/lib/permissions";
-import { FONT_DISPLAY, SIDEBAR_BG, SIDEBAR_BORDER } from "@/lib/theme";
+import { FONT_DISPLAY, SIDEBAR_BG } from "@/lib/theme";
 import { logout } from "../login/actions";
 
 const { Header, Sider, Content } = Layout;
-const HEADER_HEIGHT = 48; // shared by the top bar and the sidebar logo block so their borders line up
 
 type Role = "ADMIN" | "STAFF" | "JOBBER";
 
@@ -38,9 +37,10 @@ const NAV: { key: string; module: ModuleKey; label: string; jobberLabel?: string
   { key: "/challans", module: "challans", label: "Challans", jobberLabel: "My Challans", icon: <FileTextOutlined /> },
   { key: "/catalogs", module: "catalogs", label: "Catalogues", icon: <BookOutlined /> },
   { key: "/jobbers", module: "jobbers", label: "Jobbers", icon: <TeamOutlined /> },
-  { key: "/transfers", module: "transfers", label: "Job Transfer", icon: <SwapOutlined /> },
+  { key: "/transfers", module: "transfers", label: "Transfers", icon: <SwapOutlined /> },
   { key: "/tasks", module: "tasks", label: "Tasks", jobberLabel: "My Tasks", icon: <CheckSquareOutlined /> },
   { key: "/admin/users", module: "users", label: "Users", icon: <UsergroupAddOutlined /> },
+  { key: "/admin/masters", module: "masters", label: "Masters", icon: <AppstoreOutlined /> },
   { key: "/admin/permissions", module: "permissions", label: "Permissions", icon: <SafetyCertificateOutlined /> },
 ];
 
@@ -57,15 +57,8 @@ export function AppShell({
 }) {
   const router = useRouter();
   const path = usePathname();
-  const { token } = theme.useToken();
-  // Unknown on the server (and the first client render): assume desktop so both renders match.
-  const screens = Grid.useBreakpoint();
-  const isMobile = screens.md === false;
-  // Tablets (below 1200px) start with the 64px icon rail to leave room for tables; the toggle overrides.
-  const [userCollapsed, setUserCollapsed] = useState<boolean | null>(null);
-  const collapsed = userCollapsed ?? screens.xl === false;
-  const setCollapsed = (fn: (c: boolean) => boolean) => setUserCollapsed(fn(collapsed));
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const { phone, tablet } = useScreen();
+  const [navOpen, setNavOpen] = useState(false);
 
   // The menu navigates with router.push (no <Link>), so warm up its pages ahead of the click.
   // Production only: in development Next.js ignores prefetch and builds each page on first visit.
@@ -81,12 +74,12 @@ export function AppShell({
     return {
       key: n.key,
       icon: n.icon,
-      label: count ? (
-        <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          {label} <Badge count={count} size="small" />
+      title: label,
+      label: (
+        <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+          {label}
+          {count > 0 && <span style={{ fontSize: 12, color: "#7DD3FC" }}>{count}</span>}
         </span>
-      ) : (
-        label
       ),
     };
   });
@@ -98,66 +91,77 @@ export function AppShell({
     <Menu
       theme="dark"
       mode="inline"
+      inlineCollapsed={tablet}
       selectedKeys={selected ? [selected] : []}
       items={items}
       onClick={({ key }) => {
         router.push(key);
-        setMobileNavOpen(false);
+        setNavOpen(false);
       }}
       className="app-sidebar-menu"
-      style={{ border: "none", paddingTop: 8, background: "transparent" }}
+      style={{ border: "none", padding: tablet ? "8px 0" : "8px 4px", background: "transparent" }}
     />
   );
 
-  const brand = (compact: boolean, size: number) => (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-      <BrandMark size={size} />
+  const brand = (compact: boolean) => (
+    <div style={{ height: 64, display: "flex", alignItems: "center", justifyContent: compact ? "center" : "flex-start", gap: 10, padding: compact ? 0 : "0 20px", flexShrink: 0 }}>
+      <BrandMark size={compact ? 36 : 30} />
       {!compact && (
-        <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
-          <Typography.Text
-            style={{ fontSize: 16, fontWeight: 700, color: "#fff", fontFamily: FONT_DISPLAY, letterSpacing: "-0.01em", lineHeight: 1.2 }}
-          >
-            Yash <span style={{ color: "#00A0E3" }}>Enterprise</span>
-          </Typography.Text>
-          <span style={{ fontSize: 9.5, fontWeight: 600, color: "rgba(255,255,255,0.45)", letterSpacing: "0.12em", textTransform: "uppercase" }}>
-            Job Challan ERP
-          </span>
-        </div>
+        <span style={{ fontFamily: FONT_DISPLAY, fontSize: 16, fontWeight: 700, color: "#FFFFFF", whiteSpace: "nowrap" }}>
+          {BRAND.name} {BRAND.accent}
+        </span>
       )}
     </div>
   );
 
+  const initial = user.name.trim().charAt(0).toUpperCase() || "?";
+  const account = (
+    <Dropdown
+      trigger={["click"]}
+      menu={{
+        items: [
+          { key: "who", label: `${user.name} · ${user.role.toLowerCase()}`, disabled: true },
+          { type: "divider" },
+          { key: "logout", label: "Log out", icon: <LogoutOutlined />, danger: true },
+        ],
+        onClick: ({ key }) => key === "logout" && logout(),
+      }}
+    >
+      <button
+        type="button"
+        aria-label="Account"
+        style={{ display: "flex", alignItems: "center", gap: 10, minHeight: 44, padding: 0, border: 0, background: "transparent", cursor: "pointer", font: "inherit" }}
+      >
+        {!phone && <span style={{ fontSize: 14, color: "#475569", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.name}</span>}
+        <Avatar size={32} style={{ background: "#0369A1", fontSize: 13, fontWeight: 600, flexShrink: 0 }}>
+          {initial}
+        </Avatar>
+      </button>
+    </Dropdown>
+  );
+
   return (
     <Layout style={{ height: "100dvh", width: "100%", overflow: "hidden" }}>
-      {isMobile ? (
+      {phone ? (
         <Drawer
           placement="left"
-          open={mobileNavOpen}
-          onClose={() => setMobileNavOpen(false)}
+          open={navOpen}
+          onClose={() => setNavOpen(false)}
           size="82%"
           styles={{
             body: { padding: 0, background: SIDEBAR_BG, display: "flex", flexDirection: "column" },
             header: { display: "none" },
-            wrapper: { maxWidth: 280 },
+            wrapper: { maxWidth: 300 },
           }}
         >
-          <div
-            style={{
-              height: HEADER_HEIGHT,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              padding: "0 16px",
-              borderBottom: `1px solid ${SIDEBAR_BORDER}`,
-              flexShrink: 0,
-            }}
-          >
-            {brand(false, 30)}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingRight: 8 }}>
+            {brand(false)}
             <Button
               type="text"
-              aria-label="Close navigation"
+              aria-label="Close menu"
+              style={{ width: 44, height: 44 }}
               icon={<CloseOutlined style={{ color: "rgba(255,255,255,0.7)" }} />}
-              onClick={() => setMobileNavOpen(false)}
+              onClick={() => setNavOpen(false)}
             />
           </div>
           <div className="app-sidebar-scroll" style={{ flex: 1, overflowY: "auto", paddingBottom: 16 }}>
@@ -166,30 +170,14 @@ export function AppShell({
         </Drawer>
       ) : (
         <Sider
-          collapsible
-          collapsed={collapsed}
+          collapsed={tablet}
           trigger={null}
-          width={220}
-          collapsedWidth={64}
+          width={224}
+          collapsedWidth={72}
           className="app-sidebar-scroll"
-          style={{ background: SIDEBAR_BG, borderRight: `1px solid ${SIDEBAR_BORDER}`, height: "100dvh", overflow: "auto" }}
+          style={{ background: SIDEBAR_BG, height: "100dvh", overflow: "auto" }}
         >
-          <div
-            style={{
-              height: HEADER_HEIGHT,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: collapsed ? "center" : "flex-start",
-              padding: collapsed ? 0 : "0 20px",
-              borderBottom: `1px solid ${SIDEBAR_BORDER}`,
-              position: "sticky",
-              top: 0,
-              background: SIDEBAR_BG,
-              zIndex: 1,
-            }}
-          >
-            {brand(collapsed, 32)}
-          </div>
+          {brand(tablet)}
           {menu}
         </Sider>
       )}
@@ -197,69 +185,38 @@ export function AppShell({
       <Layout style={{ height: "100%", minWidth: 0, overflow: "hidden" }}>
         <Header
           style={{
-            background: token.colorBgContainer,
-            padding: isMobile ? "0 12px" : "0 16px",
+            background: "#FFFFFF",
+            height: phone ? 56 : 64,
+            lineHeight: "normal",
+            padding: phone ? "0 12px 0 4px" : tablet ? "0 28px" : "0 40px",
             display: "flex",
             alignItems: "center",
-            justifyContent: "space-between",
-            borderBottom: `1px solid ${token.colorBorderSecondary}`,
-            height: HEADER_HEIGHT,
-            lineHeight: `${HEADER_HEIGHT}px`,
+            gap: 8,
+            borderBottom: "1px solid #EEF2F6",
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <Button
-              type="text"
-              aria-label="Toggle navigation"
-              style={{ fontSize: 16 }}
-              icon={isMobile ? <MenuOutlined /> : collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-              onClick={isMobile ? () => setMobileNavOpen(true) : () => setCollapsed((c) => !c)}
-            />
-            {isMobile && (
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <BrandMark size={22} />
-                <Typography.Text style={{ fontWeight: 700, fontSize: 14 }}>
-                  Yash <span style={{ color: "#00A0E3" }}>Enterprise</span>
-                </Typography.Text>
-              </div>
-            )}
-          </div>
-
-          <Dropdown
-            menu={{
-              items: [
-                { key: "role", label: `Signed in as ${user.role.toLowerCase()}`, disabled: true },
-                { type: "divider" },
-                { key: "logout", label: "Logout", icon: <LogoutOutlined />, danger: true },
-              ],
-              onClick: ({ key }) => key === "logout" && logout(),
-            }}
-          >
-            <Button
-              type="text"
-              style={{ height: 34, paddingInline: isMobile ? 4 : 8, display: "flex", alignItems: "center", gap: 6, maxWidth: isMobile ? 140 : 200 }}
-            >
-              <Avatar size={24} style={{ background: token.colorPrimary, flexShrink: 0 }} icon={<UserOutlined />} />
-              <Typography.Text ellipsis style={{ fontWeight: 500, maxWidth: isMobile ? 70 : 120 }}>
-                {user.name}
-              </Typography.Text>
-              <DownOutlined style={{ fontSize: 10, color: token.colorTextTertiary }} />
-            </Button>
-          </Dropdown>
+          {phone && (
+            <>
+              <Button type="text" aria-label="Open menu" style={{ width: 44, height: 44 }} icon={<MenuOutlined style={{ fontSize: 20 }} />} onClick={() => setNavOpen(true)} />
+              <BrandMark size={32} solid />
+            </>
+          )}
+          <span style={{ flex: 1 }} />
+          {account}
         </Header>
 
         <Content
           style={{
             // Bottom padding clears the iPhone home bar.
-            padding: isMobile ? "12px 10px calc(16px + env(safe-area-inset-bottom))" : 16,
-            background: token.colorBgLayout,
+            padding: phone ? "20px 16px calc(20px + env(safe-area-inset-bottom))" : tablet ? 28 : "32px 40px",
+            background: "#F8FAFC",
             overflowY: "auto",
             overflowX: "hidden",
             flex: 1,
             minWidth: 0,
           }}
         >
-          <div style={{ maxWidth: 1600, margin: "0 auto", width: "100%" }}>{children}</div>
+          <div style={{ maxWidth: 1440, margin: "0 auto", width: "100%" }}>{children}</div>
         </Content>
       </Layout>
     </Layout>

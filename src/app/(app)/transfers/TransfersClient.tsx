@@ -150,7 +150,7 @@ export function TransfersClient({
             <Form.Item name="note" label="Note">
               <Input maxLength={200} placeholder="Why it's moving (optional)" />
             </Form.Item>
-            <Alert type="info" showIcon title="The new jobber starts from Assigned and confirms Material Received when the fabric reaches them." />
+            <Alert type="info" showIcon title="The new jobber starts from Assigned and confirms Fabric received when the fabric reaches them." />
           </Form>
         ) : (
           <Select

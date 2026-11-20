@@ -1,11 +1,11 @@
 // Self-check for the validation rules that guard money-like data. Run: npm run check
 import assert from "node:assert/strict";
-import { catalogSchema, challanSchema, qcSchema, sumMeters, taskSchema } from "../src/lib/validation";
+import { catalogSchema, challanSchema, masterSchema, qcSchema, sumMeters, taskSchema } from "../src/lib/validation";
 import { challanNo, dueLabel } from "../src/lib/format";
 import { canSetStatus, nextStatus } from "../src/lib/jobs";
 import { can, effectivePerms } from "../src/lib/permissions";
 
-const line = (lumps: string[]) => ({ designId: "d1", partType: "TOP", lumps });
+const line = (lumps: string[]) => ({ designId: "d1", partId: "p1", lumps });
 const challan = (lumps: string[]) => ({
   date: "2026-11-18",
   jobberId: "j1",
@@ -36,7 +36,7 @@ const catalog = (pieces: number, big: number) => ({
   volume: "Vol 2",
   code: "",
   fabric: "",
-  type: "TWO_PC",
+  typeId: "t1",
   piecesPerDesign: pieces,
   designs: [{ colourName: "Green" }],
   sizes: { S: 50, M: 50, L: 50, XL: 50, XXL: big, XXXL: big, XXXXL: big, XXXXXL: big },
@@ -105,3 +105,9 @@ assert.equal(dueLabel(new Date("2026-11-18T06:00:00Z"), now).text, "Overdue 2 da
 assert.equal(dueLabel(new Date("2026-11-25T06:00:00Z"), now).text, "In 5 days");
 
 console.log("check: all passed");
+
+// Masters: names are trimmed, required and capped; order defaults to 0.
+assert.deepEqual(masterSchema.parse({ name: "  Kurti " }), { name: "Kurti", sort: 0 });
+assert.equal(masterSchema.safeParse({ name: "   " }).success, false);
+assert.equal(masterSchema.safeParse({ name: "x".repeat(41) }).success, false);
+console.log("check: masters passed");

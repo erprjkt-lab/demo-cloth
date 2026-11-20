@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requirePerm } from "@/lib/auth";
+import { activeMasters } from "@/lib/masters";
 import { catalogSchema, firstError, SIZES } from "@/lib/validation";
 
 type Result = { error?: string };
@@ -14,6 +15,9 @@ export async function saveCatalog(id: string | null, input: unknown): Promise<Re
   if (!parsed.success) return { error: firstError(parsed.error) };
 
   const { designs, sizes, ...rest } = parsed.data;
+  // A hidden type may stay on a catalogue that already has it, but can't be newly picked.
+  const current = id ? await db.catalog.findFirst({ where: { id, deletedAt: null }, select: { typeId: true } }) : null;
+  if (rest.typeId !== current?.typeId && !(await activeMasters("CATALOG_TYPE", [rest.typeId]))) return { error: "Pick a catalogue type from the list" };
   // Totals are always derived here, never taken from the client.
   const data = { ...rest, designCount: designs.length, totalPieces: designs.length * rest.piecesPerDesign };
   const sizeRows = SIZES.map((size) => ({ size, qty: sizes[size] ?? 0 }));

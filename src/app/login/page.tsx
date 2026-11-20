@@ -80,7 +80,7 @@ export default function LoginPage() {
           <div className="cf-auth-top-glow" />
           <div className="cf-mobile-brand-row">
             <div className="flex items-center gap-2">
-              <BrandMark size={36} />
+              <BrandMark size={36} solid />
               <BrandName dark={false} />
             </div>
           </div>
@@ -91,7 +91,7 @@ export default function LoginPage() {
               <p className="cf-auth-subtitle">Enter your user ID and password to continue</p>
             </div>
             <div className="cf-auth-mark-box">
-              <BrandMark size={44} />
+              <BrandMark size={44} solid />
             </div>
           </header>
 

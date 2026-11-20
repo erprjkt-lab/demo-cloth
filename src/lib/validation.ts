@@ -5,11 +5,13 @@ export const SIZES = ["S", "M", "L", "XL", "XXL", "XXXL", "XXXXL", "XXXXXL"] as 
 export const SIZE_LABEL: Record<(typeof SIZES)[number], string> = {
   S: "S", M: "M", L: "L", XL: "XL", XXL: "XXL", XXXL: "3XL", XXXXL: "4XL", XXXXXL: "5XL",
 };
-export const CATALOG_TYPES = ["SINGLE", "TWO_PC", "THREE_PC"] as const;
-export const CATALOG_TYPE_LABEL = { SINGLE: "Single", TWO_PC: "2 pcs", THREE_PC: "3 pcs" } as const;
-export const PARTS = ["TOP", "PANT", "DUPATTA"] as const;
-export const PART_LABEL = { TOP: "Top", PANT: "Pant", DUPATTA: "Dupatta" } as const;
 export const ROLES = ["ADMIN", "STAFF", "JOBBER"] as const;
+
+/** One entry on the Masters page (a part or a catalogue type). */
+export const masterSchema = z.object({
+  name: z.string().trim().min(1, "Enter a name").max(40, "Name is too long (max 40)"),
+  sort: z.coerce.number().int().min(0).max(999).default(0),
+});
 
 // ponytail: guessed limits (paper lumps run 20-130 m); confirm with the owner.
 export const LUMP_MIN = 1;
@@ -43,7 +45,7 @@ export const catalogSchema = z
     volume: opt(50),
     code: opt(50),
     fabric: opt(200),
-    type: z.enum(CATALOG_TYPES),
+    typeId: z.string().min(1, "Pick a catalogue type"),
     piecesPerDesign: count("Pieces per design", 1_000_000).refine((n) => n > 0, "Pieces per design is required"),
     designs: z
       .array(z.object({ id: z.string().optional(), colourName: req("Design colour", 50) }))
@@ -82,7 +84,7 @@ export const challanSchema = z.object({
     .array(
       z.object({
         designId: z.string().min(1, "Pick a design colour on every line"),
-        partType: z.enum(PARTS),
+        partId: z.string().min(1, "Pick a part on every line"),
         lumps: z.array(meterSchema).min(1, "Every line needs at least one lump").max(MAX_LUMPS_PER_LINE),
       }),
     )

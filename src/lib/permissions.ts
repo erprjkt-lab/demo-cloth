@@ -2,6 +2,12 @@
 // Pure data so the sidebar (client) and every Server Action (server) read the same rules.
 
 export const ACTIONS = ["read", "write", "modify", "delete", "approve"] as const;
+
+/**
+ * Per-user overrides (the Permissions page). Switched off for now: everyone gets their role's
+ * defaults below and the Permissions menu is hidden. Saved overrides are kept; set true to bring it back.
+ */
+export const PERMISSIONS_ENABLED = false;
 export type Action = (typeof ACTIONS)[number];
 type Role = "ADMIN" | "STAFF" | "JOBBER";
 
@@ -15,6 +21,7 @@ export const MODULES = [
   { key: "transfers", label: "Job Transfer", actions: ["read", "write"] },
   { key: "tasks", label: "Tasks", actions: ["read", "write", "modify"] },
   { key: "users", label: "Users", actions: ["read", "write", "modify"] },
+  { key: "masters", label: "Masters", actions: ["read", "write", "modify"] },
   { key: "permissions", label: "Permissions", actions: ["read", "modify"] },
 ] as const satisfies readonly { key: string; label: string; actions: readonly Action[] }[];
 

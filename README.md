@@ -50,6 +50,10 @@ UI follows CoreFlow ERP: Ant Design 6 with CoreFlow's theme, dark sidebar, and e
 - **Tasks**: office assigns to anyone (including a jobber's login); the assignee sees it in the Tasks tab and can mark it done. Due reminders show under Tasks → Reminders.
 - **PWA + push**: installable (Add to Home Screen). Tasks tab → turn on notifications. A new task pushes immediately; reminders push when `/api/cron/reminders` runs. On iPhone, push only works from the installed app. Push needs HTTPS (or localhost).
 
+## Masters
+
+Admin → **Masters** holds the lists the app picks from: **Parts** (Top, Pant, Dupatta… on challan lines) and **Catalogue types** (Single, 2 pcs, 3 pcs…). Items can be added, renamed, reordered and hidden. Records point at an item by id, so a rename shows everywhere, and hiding only removes it from the pickers. A new database gets the starting lists from `npm run db:seed`.
+
 ## Roles and permissions
 
 | Role | Default access |
@@ -58,7 +62,7 @@ UI follows CoreFlow ERP: Ant Design 6 with CoreFlow's theme, dark sidebar, and e
 | STAFF | Job work, challans, catalogues, jobbers, transfers, tasks: read, create, edit. No deletes, users or permissions |
 | JOBBER | Only their own jobs (update status), challans (read) and tasks (mark done) |
 
-Admin → **Permissions** overrides the defaults per user: Read / Write / Modify / Delete per menu, as in CoreFlow. Rules live in `src/lib/permissions.ts`; every page and Server Action calls `requirePerm()` in `src/lib/auth.ts`, and jobbers' rows are filtered in the query (`jobberScope`). Jobbers can be created and edited but not deleted.
+The **Permissions** page is switched off for now (`PERMISSIONS_ENABLED` in `src/lib/permissions.ts`), so everyone gets their role defaults above. When it is on, Admin → **Permissions** overrides the defaults per user: Read / Write / Modify / Delete per menu, as in CoreFlow. Rules live in `src/lib/permissions.ts`; every page and Server Action calls `requirePerm()` in `src/lib/auth.ts`, and jobbers' rows are filtered in the query (`jobberScope`). Jobbers can be created and edited but not deleted.
 
 ## Checks
 

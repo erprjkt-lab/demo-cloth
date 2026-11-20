@@ -31,7 +31,7 @@ h4 {
   letter-spacing: -0.01em;
 }
 
-/* Sidebar, as in CoreFlow's index.css */
+/* Sidebar: no scrollbar; the active item is a soft sky pill with a sky icon (design system). */
 .app-sidebar-scroll {
   scrollbar-width: none;
 }
@@ -39,21 +39,33 @@ h4 {
   display: none;
 }
 .app-sidebar-menu .ant-menu-item-selected {
-  position: relative;
-}
-.app-sidebar-menu .ant-menu-item-selected::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 6px;
-  bottom: 6px;
-  width: 3.5px;
-  border-radius: 0 3px 3px 0;
-  background: #00a0e3;
-  box-shadow: 0 0 10px rgba(0, 160, 227, 0.75);
+  font-weight: 600;
 }
 .app-sidebar-menu .ant-menu-item-selected .anticon {
-  color: #00a0e3 !important;
+  color: #7dd3fc !important;
+}
+
+/* Filter tabs sit inside the list panel, whose own border is the line under them. */
+.dt-tabs {
+  min-width: 0;
+}
+.dt-tabs > .ant-tabs-nav {
+  margin: 0;
+}
+.dt-tabs > .ant-tabs-nav::before {
+  display: none;
+}
+.dt-tabs .ant-tabs-tab {
+  padding: 15px 0;
+  font-weight: 500;
+}
+.dt-tabs .ant-tabs-tab-active .ant-tabs-tab-btn {
+  font-weight: 600;
+}
+
+/* Table rows: hairline dividers, no header fill. */
+.ant-table-wrapper .ant-table-thead > tr > th {
+  font-weight: 500;
 }
 
 /* Numbers that should line up in a column (CoreFlow "ledger" face). */

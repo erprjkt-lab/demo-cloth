@@ -7,7 +7,7 @@ import { Avatar, Button, Tag } from "antd";
 import type { TableColumnsType } from "antd";
 import { DataTable, Ledger, PageHeader, useRun } from "@/components/ui";
 import { fmtDate, thumb } from "@/lib/format";
-import { CATALOG_TYPE_LABEL } from "@/lib/validation";
+import type { MasterOption } from "@/lib/masters";
 import { deleteCatalog } from "./actions";
 import { CatalogDrawer, type CatalogInput } from "./CatalogDrawer";
 
@@ -18,8 +18,10 @@ export function CatalogsClient({
   canWrite,
   canModify,
   canDelete,
+  types,
 }: {
   rows: Row[];
+  types: MasterOption[];
   canWrite: boolean;
   canModify: boolean;
   canDelete: boolean;
@@ -41,7 +43,7 @@ export function CatalogsClient({
       ),
     },
     { title: "Code", dataIndex: "code", responsive: ["lg"], render: (v) => v ?? "—" },
-    { title: "Type", dataIndex: "type", render: (t: Row["type"]) => <Tag>{CATALOG_TYPE_LABEL[t]}</Tag> },
+    { title: "Type", dataIndex: "typeName", render: (t: string) => <Tag>{t}</Tag> },
     { title: "Designs", dataIndex: "designCount", align: "right" },
     { title: "Pcs / design", dataIndex: "piecesPerDesign", align: "right", responsive: ["md"], render: (n) => <Ledger>{n.toLocaleString("en-IN")}</Ledger> },
     { title: "Total pcs", dataIndex: "totalPieces", align: "right", render: (n) => <Ledger>{n.toLocaleString("en-IN")}</Ledger> },
@@ -83,7 +85,7 @@ export function CatalogsClient({
           },
         ]}
       />
-      <CatalogDrawer catalog={editing} onClose={() => setEditing(undefined)} />
+      <CatalogDrawer catalog={editing} types={types} onClose={() => setEditing(undefined)} />
     </>
   );
 }

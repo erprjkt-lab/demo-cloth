@@ -3,25 +3,29 @@
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import dayjs from "dayjs";
-import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
-import { Alert, Button, Card, Col, DatePicker, Form, Input, Row, Segmented, Select, Space, Typography } from "antd";
+import { DeleteOutlined } from "@ant-design/icons";
+import { Alert, Button, Card, Col, DatePicker, Form, Input, Row, Select, Space, Typography } from "antd";
 import { PhotoInput, type Photo } from "@/components/PhotoInput";
-import { Ledger, PageHeader } from "@/components/ui";
+import { Ledger, MasterPicker, PageHeader, useScreen } from "@/components/ui";
+import type { MasterOption } from "@/lib/masters";
 import { today } from "@/lib/format";
-import { MAX_LUMPS_PER_LINE, PART_LABEL, PARTS, sumMeters } from "@/lib/validation";
+import { MAX_LUMPS_PER_LINE, sumMeters } from "@/lib/validation";
 import { createChallan } from "./actions";
 
 type Catalog = { id: string; name: string; volume: string | null; fabric: string | null; designs: { id: string; colourName: string }[] };
 type Job = { id: string; label: string; jobberId: string; catalogId: string | null };
-type Line = { key: number; designId?: string; partType: (typeof PARTS)[number]; lumps: string[] };
+type Line = { key: number; designId?: string; partId?: string; lumps: string[] };
 
 export function ChallanForm({
   jobbers,
   catalogs,
   jobs,
+  parts,
   initialJobId,
 }: {
   jobbers: { id: string; name: string }[];
+  /** Garment parts from Masters (Top, Pant, …). */
+  parts: MasterOption[];
   catalogs: Catalog[];
   jobs: Job[];
   initialJobId?: string;
@@ -29,7 +33,7 @@ export function ChallanForm({
   const router = useRouter();
   const startJob = jobs.find((j) => j.id === initialJobId);
   const nextKey = useRef(1);
-  const newLine = (): Line => ({ key: nextKey.current++, partType: "TOP", lumps: [""] });
+  const newLine = (): Line => ({ key: nextKey.current++, partId: parts.find((p) => p.isActive)?.id, lumps: [""] });
 
   const [date, setDate] = useState(today);
   const [jobberId, setJobberId] = useState<string | undefined>(startJob?.jobberId);
@@ -44,6 +48,7 @@ export function ChallanForm({
   const [pending, start] = useTransition();
 
   const catalog = catalogs.find((c) => c.id === catalogId);
+  const { phone } = useScreen();
   const grandTotal = sumMeters(lines.flatMap((l) => l.lumps));
 
   function pickCatalog(id?: string) {
@@ -81,7 +86,7 @@ export function ChallanForm({
         designPhotoUrl: photo?.url ?? null,
         designPhotoId: photo?.publicId ?? null,
         // Blank lump boxes are ignored; the server recomputes everything anyway.
-        lines: lines.map((l) => ({ designId: l.designId, partType: l.partType, lumps: l.lumps.filter((m) => m.trim()) })),
+        lines: lines.map((l) => ({ designId: l.designId, partId: l.partId, lumps: l.lumps.filter((m) => m.trim()) })),
       });
       if (res?.error) setError(res.error);
     });
@@ -89,20 +94,9 @@ export function ChallanForm({
 
   return (
     <>
-      <PageHeader
-        title="New Challan"
-        breadcrumbs={[{ label: "Challans", href: "/challans" }, { label: "New Challan" }]}
-        actions={
-          <>
-            <Button onClick={() => router.back()}>Cancel</Button>
-            <Button type="primary" loading={pending} onClick={submit}>
-              Save Challan
-            </Button>
-          </>
-        }
-      />
+      <PageHeader title="New challan" subtitle="Fabric given to a jobber" breadcrumbs={[{ label: "Challans", href: "/challans" }, { label: "New challan" }]} />
 
-      <Card title="Challan details" style={{ marginBottom: 12 }}>
+      <Card style={{ marginBottom: 16 }}>
         <Form layout="vertical">
           <Row gutter={12}>
             <Col xs={24} md={6}>
@@ -171,8 +165,8 @@ export function ChallanForm({
         <Card
           key={l.key}
           size="small"
-          title={`Line ${li + 1}`}
-          style={{ marginBottom: 12 }}
+          title={[catalog?.designs.find((d) => d.id === l.designId)?.colourName ?? `Line ${li + 1}`, parts.find((p) => p.id === l.partId)?.name].filter(Boolean).join(" · ")}
+          style={{ marginBottom: 16 }}
           extra={
             <Space>
               <Typography.Text type="secondary">
@@ -196,24 +190,22 @@ export function ChallanForm({
               />
             </Col>
             <Col xs={24} md={12}>
-              <Segmented
-                block
-                value={l.partType}
-                onChange={(partType) => updateLine(l.key, { partType: partType as Line["partType"] })}
-                options={PARTS.map((p) => ({ value: p, label: PART_LABEL[p] }))}
-              />
+              <MasterPicker options={parts} value={l.partId} onChange={(partId) => updateLine(l.key, { partId })} />
             </Col>
           </Row>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(96px, 1fr))", gap: 8 }}>
+          {/* Lumps as grey tiles, four to a row on a phone; the last tile adds one more. */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(76px, 1fr))", gap: 8 }}>
             {l.lumps.map((m, i) => (
               <Input
                 key={i}
                 prefix={<span style={{ fontSize: 11, color: "#94A3B8" }}>{i + 1}</span>}
                 inputMode="decimal"
                 placeholder="m"
+                aria-label={`Lump ${i + 1} meters`}
+                variant="filled"
                 className="ledger"
-                style={{ textAlign: "right" }}
+                style={{ height: 44 }}
                 autoFocus={focus === `${l.key}:${i}`}
                 value={m}
                 onChange={(e) =>
@@ -230,18 +222,18 @@ export function ChallanForm({
                 }
               />
             ))}
+            <Button type="dashed" style={{ height: 44, color: "#0369A1" }} onClick={() => addLump(l)}>
+              + Lump
+            </Button>
           </div>
-          <Button type="dashed" icon={<PlusOutlined />} style={{ marginTop: 10 }} onClick={() => addLump(l)}>
-            Add lump
-          </Button>
         </Card>
       ))}
 
-      <Button type="dashed" block icon={<PlusOutlined />} style={{ marginBottom: 12 }} onClick={() => setLines([...lines, newLine()])}>
-        Add line (colour / part)
+      <Button type="link" style={{ paddingInline: 0, marginBottom: 16, fontSize: 15 }} onClick={() => setLines([...lines, newLine()])}>
+        + Add colour / part
       </Button>
 
-      <Card title="Photo and remarks" style={{ marginBottom: 12 }}>
+      <Card title="Photo and remarks" style={{ marginBottom: 16 }}>
         <Form layout="vertical">
           <Form.Item label="Design photo">
             <PhotoInput value={photo} onChange={setPhoto} />
@@ -253,21 +245,37 @@ export function ChallanForm({
       </Card>
 
       {error && <Alert type="error" showIcon title={error} style={{ marginBottom: 12 }} />}
-      <Card
-        size="small"
-        style={{ position: "sticky", bottom: 0, zIndex: 5, boxShadow: "0 -4px 16px rgba(15,23,42,0.08)" }}
-        styles={{ body: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 } }}
+      {/* Sticky footer: the running total and the one Save button. */}
+      <div
+        style={{
+          position: "sticky",
+          bottom: 0,
+          zIndex: 5,
+          display: "flex",
+          alignItems: "center",
+          gap: 16,
+          padding: "12px 16px",
+          background: "#FFFFFF",
+          border: "1px solid #EEF2F6",
+          borderRadius: 12,
+          boxShadow: "0 -4px 16px rgba(15,23,42,0.06)",
+        }}
       >
-        <div>
-          <Typography.Text type="secondary">Total</Typography.Text>
-          <div style={{ fontSize: 20, fontWeight: 700 }}>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+          <span style={{ fontSize: 13, color: "#64748B" }}>Total · {lines.reduce((n, l) => n + l.lumps.filter((m) => m.trim()).length, 0)} lumps</span>
+          <span style={{ fontSize: 20 }}>
             <Ledger>{grandTotal} m</Ledger>
-          </div>
+          </span>
         </div>
-        <Button type="primary" size="large" loading={pending} onClick={submit}>
-          Save Challan
+        {!phone && (
+          <Button onClick={() => router.back()} style={{ height: 48 }}>
+            Cancel
+          </Button>
+        )}
+        <Button type="primary" loading={pending} onClick={submit} style={{ height: 48, paddingInline: 24, fontSize: 15 }}>
+          Save challan
         </Button>
-      </Card>
+      </div>
     </>
   );
 }

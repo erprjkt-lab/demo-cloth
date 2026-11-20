@@ -7,15 +7,17 @@ import { DataTable, Ledger, PageHeader } from "@/components/ui";
 import { ChallanTable } from "@/components/ChallanTable";
 import { thumb } from "@/lib/format";
 import type { ChallanRow } from "@/lib/rows";
-import { CATALOG_TYPE_LABEL, PART_LABEL, PARTS, SIZE_LABEL, SIZES } from "@/lib/validation";
+import type { MasterOption } from "@/lib/masters";
+import { SIZE_LABEL, SIZES } from "@/lib/validation";
 import { CatalogDrawer, type CatalogInput } from "../CatalogDrawer";
 
-type Part = (typeof PARTS)[number];
-type Holding = { key: string; design: string; jobber: string; total: string } & Partial<Record<Part, string | null>>;
+/** Meters per part, keyed by part id. */
+type Holding = { key: string; design: string; jobber: string; total: string } & Record<string, string | null>;
 
 export function CatalogDetail({
   catalog: c,
   canModify,
+  types,
   parts,
   holdings,
   jobbers,
@@ -23,7 +25,8 @@ export function CatalogDetail({
 }: {
   catalog: CatalogInput & { designCount: number; totalPieces: number };
   canModify: boolean;
-  parts: Part[];
+  types: MasterOption[];
+  parts: { id: string; name: string }[];
   holdings: Holding[];
   jobbers: { jobber: string; meters: string }[];
   challans: ChallanRow[];
@@ -52,7 +55,7 @@ export function CatalogDetail({
               size="small"
               column={{ xs: 1, sm: 2 }}
               items={[
-                { label: "Type", children: CATALOG_TYPE_LABEL[c.type] },
+                { label: "Type", children: c.typeName },
                 { label: "Code", children: c.code ?? "—" },
                 { label: "Fabric", children: c.fabric ?? "—" },
                 {
@@ -114,8 +117,8 @@ export function CatalogDetail({
                   columns={[
                     { title: "Design · Jobber", dataIndex: "design", render: (d, h) => `${d} · ${h.jobber}` },
                     ...parts.map((p) => ({
-                      title: `${PART_LABEL[p]} (m)`,
-                      dataIndex: p,
+                      title: `${p.name} (m)`,
+                      dataIndex: p.id,
                       align: "right" as const,
                       render: (m: string | null) => (m ? <Ledger>{m}</Ledger> : "—"),
                     })),
@@ -144,7 +147,7 @@ export function CatalogDetail({
           ]}
         />
 
-      <CatalogDrawer catalog={editing} onClose={() => setEditing(undefined)} />
+      <CatalogDrawer catalog={editing} types={types} onClose={() => setEditing(undefined)} />
     </>
   );
 }

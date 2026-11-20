@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { getIronSession } from "iron-session";
 import { db } from "./db";
-import { can, effectivePerms, type Action, type ModuleKey } from "./permissions";
+import { can, effectivePerms, PERMISSIONS_ENABLED, type Action, type ModuleKey } from "./permissions";
 
 export const SESSION_COOKIE = "jc_session";
 
@@ -39,7 +39,9 @@ export const getUser = cache(async () => {
   });
   if (!user?.isActive) return null;
   const { permissions, ...rest } = user;
-  return { ...rest, perms: effectivePerms(user.role, permissions) };
+  const perms = effectivePerms(user.role, PERMISSIONS_ENABLED ? permissions : []);
+  if (!PERMISSIONS_ENABLED) delete perms.permissions; // hides the menu; the page and its actions 404
+  return { ...rest, perms };
 });
 
 export type SessionUser = NonNullable<Awaited<ReturnType<typeof getUser>>>;

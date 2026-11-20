@@ -2,7 +2,6 @@ import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { requirePerm } from "@/lib/auth";
 import { challanNo } from "@/lib/format";
-import { PART_LABEL } from "@/lib/validation";
 import { TransferForm } from "./TransferForm";
 
 export default async function TransferPage({ params }: { params: Promise<{ id: string }> }) {
@@ -13,7 +12,7 @@ export default async function TransferPage({ params }: { params: Promise<{ id: s
     where: { id, deletedAt: null },
     include: {
       jobber: { select: { name: true } },
-      lines: { include: { design: true, lumps: { orderBy: { seq: "asc" } } } },
+      lines: { include: { design: true, part: { select: { name: true } }, lumps: { orderBy: { seq: "asc" } } } },
     },
   });
   if (!c) notFound();
@@ -29,7 +28,7 @@ export default async function TransferPage({ params }: { params: Promise<{ id: s
       jobbers={jobbers}
       lines={c.lines.map((l) => ({
         id: l.id,
-        label: `${l.design.colourName} ${PART_LABEL[l.partType]}`,
+        label: `${l.design.colourName} ${l.part.name}`,
         lumps: l.lumps.map((x) => ({ id: x.id, seq: x.seq, meters: x.meters.toString() })),
       }))}
     />

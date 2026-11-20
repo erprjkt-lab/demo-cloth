@@ -5,15 +5,13 @@ import { App, ConfigProvider } from "antd";
 import type { ThemeConfig } from "antd";
 import { ANTD_THEME } from "@/lib/theme";
 
-// Touch screens (phones, tablets): 40px controls and 15px text, easy to hit with a finger.
-// Mouse screens keep CoreFlow's dense 32px desktop sizing.
+// Touch screens (phones, tablets): 44px controls and 16px text (no iOS zoom on focus), easy to hit with a finger.
 const TOUCH_THEME: ThemeConfig = {
   ...ANTD_THEME,
-  token: { ...ANTD_THEME.token, controlHeight: 40, fontSize: 15 },
+  token: { ...ANTD_THEME.token, controlHeight: 44, fontSize: 16 },
   components: {
     ...ANTD_THEME.components,
-    Button: { ...ANTD_THEME.components?.Button, controlHeight: 40 },
-    Table: { ...ANTD_THEME.components?.Table, cellPaddingBlock: 12 },
+    Button: { ...ANTD_THEME.components?.Button, controlHeight: 44 },
     Menu: { ...ANTD_THEME.components?.Menu, itemHeight: 48 },
   },
 };
